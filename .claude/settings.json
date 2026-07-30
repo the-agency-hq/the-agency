@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "../*"
+    ],
+    "allow": [
+      "Bash(cd *)",
+      "Bash(echo *)",
+      "Bash(find *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(latte *)",
+      "Read(**/*)",
+      "Skill(update-config)",
+      "WebSearch"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}

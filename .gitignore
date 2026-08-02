@@ -1,1 +1,3 @@
 build
+node_modules/
+web/static/css/app.css

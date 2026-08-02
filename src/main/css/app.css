@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@source "../../../web/**/*.jte";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Palette lifted verbatim from ../website/assets/css/main.css so the admin UI and the marketing site are
+     recognisably the same product. Do not fork these values -- change them there and copy them here. */
+
+  /* Primary accent — the cyan from the logo badge (#22d3ee) */
+  --color-accent-300: #67e8f9;
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #06b6d4;
+  --color-accent-600: #0891b2;
+  --color-accent-700: #0e7490;
+  --color-accent-800: #155e75;
+
+  /* Secondary — the blue from the logo (#1e40af) */
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1e40af;
+
+  /* Surfaces — the near-black navy from the logo (#011327).
+     Dark mode should read as a dim operations room, not pure black. */
+  --color-navy-600: #1e4b73;
+  --color-navy-700: #163a5f;
+  --color-navy-800: #0a2540;
+  --color-navy-900: #041c33;
+  --color-navy-950: #011327;
+}
+
+/* Dossier label — the monospace section markers the site uses above every section heading. */
+.dossier-label {
+  @apply font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent-700;
+}
+
+:is(.dark) .dossier-label {
+  @apply text-accent-400;
+}
+
+/* Faint grid backdrop — the "operations room" texture from the site's hero sections, reused behind the page
+   header so the admin UI opens on the same note the marketing site does. */
+.grid-backdrop {
+  background-image:
+    linear-gradient(to right, rgba(2, 19, 39, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(2, 19, 39, 0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 40%, transparent 100%);
+}
+
+:is(.dark) .grid-backdrop {
+  background-image:
+    linear-gradient(to right, rgba(103, 232, 249, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
+}

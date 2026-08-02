@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  jOOQ code-generation configuration. Run via the `codegen` build target, which creates and migrates the
+  `agency_schema` database and writes typed classes into dev.theagencyhq.agency.db.jooq.
+-->
+<configuration xmlns="http://www.jooq.org/xsd/jooq-codegen-3.0.0.xsd">
+  <jdbc>
+    <driver>org.postgresql.Driver</driver>
+    <url>jdbc:postgresql://127.0.0.1:5432/agency_schema</url>
+    <user>dev</user>
+    <password>dev</password>
+  </jdbc>
+
+  <generator>
+    <database>
+      <name>org.jooq.meta.postgres.PostgresDatabase</name>
+      <inputSchema>public</inputSchema>
+      <includes>.*</includes>
+      <excludes>versions</excludes>
+
+      <forcedTypes>
+        <!-- All epoch-millis BIGINT timestamp columns -> Instant. -->
+        <forcedType>
+          <userType>java.time.Instant</userType>
+          <lambdaConverter>
+            <from>t -&gt; t == null ? null : java.time.Instant.ofEpochMilli(t)</from>
+            <to>u -&gt; u == null ? null : u.toEpochMilli()</to>
+          </lambdaConverter>
+          <includeExpression>.*\.(insert_instant|update_instant|last_polled_instant)</includeExpression>
+        </forcedType>
+
+        <!-- brief_sources.last_status -> SourceStatus -->
+        <forcedType>
+          <userType>dev.theagencyhq.agency.model.SourceStatus</userType>
+          <lambdaConverter>
+            <from>t -&gt; t == null ? null : dev.theagencyhq.agency.model.SourceStatus.valueOf(t)</from>
+            <to>u -&gt; u == null ? null : u.name()</to>
+          </lambdaConverter>
+          <includeExpression>.*\.brief_sources\.last_status</includeExpression>
+        </forcedType>
+      </forcedTypes>
+    </database>
+
+    <generate>
+      <pojos>false</pojos>
+      <daos>false</daos>
+      <interfaces>false</interfaces>
+      <javadoc>true</javadoc>
+    </generate>
+
+    <target>
+      <packageName>dev.theagencyhq.agency.db.jooq</packageName>
+      <directory>src/main/java</directory>
+      <clean>true</clean>
+    </target>
+  </generator>
+</configuration>

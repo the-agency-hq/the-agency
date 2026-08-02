@@ -1,0 +1,26 @@
+{
+  "organizationIds": ["42", "43"],
+  "briefs": [
+    {
+      "checksum": "opaque-42-73",
+      "organization": { "id": "42", "name": "FusionAuth" },
+      "version": 73,
+      "files": [
+        {
+          "path": ".claude/rules/foo.md",
+          "encoding": "text",
+          "mode": "r--------",
+          "content": "For Claude",
+          "checksum": "7b0464d7d419e8e21902270f71ec5e809ba2d1af68aea0df38f4e4913366a1b8",
+          "missionTypes": ["Web", "Library"]
+        }
+      ]
+    },
+    {
+      "checksum": "opaque-43-5",
+      "organization": { "id": "43", "name": "Inversoft" },
+      "version": 5,
+      "files": []
+    }
+  ]
+}

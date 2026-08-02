@@ -1,15 +1,48 @@
-project(group: "dev.theagencyhq", name: "agency", version: "0.1.0", licenses: ["MIT"]) {
+project(group: "dev.theagencyhq", name: "the-agency", version: "0.1.0", licenses: ["MIT"]) {
   workflow {
     standard()
+
+    // jOOQ declares Maven dependencies with non-semantic versions (io.r2dbc:r2dbc-spi + its parent POM).
+    // jOOQ's module-info `requires` r2dbc.spi, so it must be present; these mappings let Latte resolve it.
+    semanticVersions {
+      mapping(id: "io.r2dbc:r2dbc-spi:1.0.0.RELEASE", version: "1.0.0")
+      mapping(id: "io.r2dbc:r2dbc-spi-parent:1.0.0.RELEASE", version: "1.0.0")
+    }
   }
   publishWorkflow {
     latte()
   }
 
   dependencies {
+    group(name: "compile-processors") {
+      dependency(id: "org.lattejava:json:0.4.3")
+    }
     group(name: "compile") {
+      dependency(id: "com.zaxxer:HikariCP:7.0.2")
+      dependency(id: "gg.jte:jte:3.2.1")
+      dependency(id: "gg.jte:jte-runtime:3.2.1")
+      // jOOQ's module-info `requires static` r2dbc-spi and reactive-streams, so javac needs them on the
+      // compile module-path. They are optional in jOOQ's POM and so are not resolved transitively.
+      dependency(id: "io.r2dbc:r2dbc-spi:1.0.0.RELEASE")
+      dependency(id: "org.jooq:jooq:3.21.4")
+      dependency(id: "org.lattejava:database:0.1.0")
       dependency(id: "org.lattejava:http:0.3.0")
-      dependency(id: "org.lattejava:web:0.6.0")
+      dependency(id: "org.lattejava:version:0.6.2")
+      dependency(id: "org.lattejava:web:0.6.1")
+      dependency(id: "org.postgresql:postgresql:42.7.11")
+      dependency(id: "org.reactivestreams:reactive-streams:1.0.4")
+    }
+    // Build-only jOOQ code-generation tooling. Never compiled into the app; assembled into a classpath
+    // only by the `codegen` target below.
+    group(name: "codegen", export: false) {
+      dependency(id: "io.r2dbc:r2dbc-spi:1.0.0.RELEASE")
+      dependency(id: "jakarta.activation:jakarta.activation-api:2.1.3")
+      dependency(id: "jakarta.xml.bind:jakarta.xml.bind-api:4.0.2")
+      dependency(id: "org.jooq:jooq:3.21.4")
+      dependency(id: "org.jooq:jooq-codegen:3.21.4")
+      dependency(id: "org.jooq:jooq-meta:3.21.4")
+      dependency(id: "org.postgresql:postgresql:42.7.11")
+      dependency(id: "org.reactivestreams:reactive-streams:1.0.4")
     }
     group(name: "test-compile", export: false) {
       dependency(id: "org.testng:testng:7.12.0")
@@ -22,13 +55,16 @@ project(group: "dev.theagencyhq", name: "agency", version: "0.1.0", licenses: ["
 }
 
 // Plugins
-dependency = loadPlugin(id: "org.lattejava.plugin:dependency:0.4.0")
-idea = loadPlugin(id: "org.lattejava.plugin:idea:0.4.1")
-java = loadPlugin(id: "org.lattejava.plugin:java:0.4.4")
-javaTestNG = loadPlugin(id: "org.lattejava.plugin:java-testng:0.4.0")
-release = loadPlugin(id: "org.lattejava.plugin:release-git:0.4.0")
+database = loadPlugin(id: "org.lattejava.plugin:database:0.6.0")
+dependency = loadPlugin(id: "org.lattejava.plugin:dependency:0.6.0")
+file = loadPlugin(id: "org.lattejava.plugin:file:0.6.0")
+idea = loadPlugin(id: "org.lattejava.plugin:idea:0.6.1")
+java = loadPlugin(id: "org.lattejava.plugin:java:0.6.0")
+javaTestNG = loadPlugin(id: "org.lattejava.plugin:java-testng:0.6.0")
+release = loadPlugin(id: "org.lattejava.plugin:release-git:0.6.0")
 
-// Plugin settings (module build ensures that the modules are made available to the `run` target)
+// Plugin settings
+database.settings.type = "postgresql"
 java.settings.javaVersion = "25"
 javaTestNG.settings.javaVersion = "25"
 
@@ -36,17 +72,54 @@ target(name: "clean", description: "Cleans the project") {
   java.clean()
 }
 
-target(name: "build", description: "Compiles and JARs the project") {
+target(name: "build", description: "Compiles and JARs the project", dependsOn: ["codegen"]) {
   java.compile()
   java.jar()
+
+  // Build the CSS
+  if (!new File("node_modules/@tailwindcss/cli").exists()) {
+    file.execute(cmd: "npm install")
+  }
+  file.execute(cmd: "npx @tailwindcss/cli -i src/main/css/app.css -o web/static/css/app.css")
 }
 
-target(name: "test", description: "Runs the project's tests", dependsOn: ["build"]) {
+target(name: "test", description: "Runs the project's tests", dependsOn: ["build", "test-database"]) {
   javaTestNG.test()
 }
 
-target(name: "run", description: "Runs the web server", dependsOn: ["build"]) {
+target(name: "tailwind", description: "Runs Tailwind in watch mode against web/**/*.jte, rebuilding on every edit") {
+  if (!new File("node_modules/@tailwindcss/cli").exists()) {
+    file.execute(cmd: "npm install")
+  }
+  file.execute(cmd: "npx @tailwindcss/cli -i src/main/css/app.css -o web/static/css/app.css --watch")
+}
+
+target(name: "run", description: "Compiles the Tailwind CSS and runs the web server", dependsOn: ["build"]) {
   java.run(main: "dev.theagencyhq.agency.Main")
+}
+
+target(name: "main-database", description: "Creates/recreates the main database. The app applies the SQL migrations on startup.") {
+  database.createMainDatabase()
+}
+
+target(name: "test-database", description: "Creates/recreates the test database. The app applies the SQL migrations on startup.") {
+  database.createTestDatabase()
+}
+
+target(name: "codegen", description: "Generates the jOOQ classes from the live `agency_schema` database") {
+  // Generate against a separate database so the main and test databases are never disrupted
+  database.settings.name = "agency_schema"
+  database.createDatabase()
+  database.migrate()
+
+  java.run(
+      main: "org.jooq.codegen.GenerationTool",
+      arguments: "src/main/jooq/codegen.xml",
+      jvmArguments:
+          "--add-modules jakarta.xml.bind,r2dbc.spi,org.reactivestreams "
+          + "--add-opens org.jooq.meta/org.jooq.meta.jaxb=org.jooq",
+      dependencies: [[group: "codegen", transitive: true, fetchSource: false, transitiveGroups: ["compile", "runtime"]]]
+  )
 }
 
 target(name: "int", description: "Releases a local integration build of the project", dependsOn: ["test"]) {

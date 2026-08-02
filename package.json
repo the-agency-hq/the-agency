@@ -1,0 +1,8 @@
+{
+  "name": "the-agency-admin",
+  "private": true,
+  "devDependencies": {
+    "@tailwindcss/cli": "^4",
+    "tailwindcss": "^4"
+  }
+}

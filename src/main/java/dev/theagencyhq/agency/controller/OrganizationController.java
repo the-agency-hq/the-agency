@@ -12,6 +12,7 @@ import dev.theagencyhq.agency.error.ValidationException;
 import dev.theagencyhq.agency.model.BriefFile;
 import dev.theagencyhq.agency.model.BriefSource;
 import dev.theagencyhq.agency.model.Organization;
+import dev.theagencyhq.agency.model.User;
 import dev.theagencyhq.agency.model.view.BriefFileView;
 import dev.theagencyhq.agency.model.view.BriefVersionView;
 import dev.theagencyhq.agency.model.view.OrganizationDetailView;
@@ -20,12 +21,19 @@ import dev.theagencyhq.agency.service.Services;
 
 /**
  * The admin UI: create an Organization, register its source path, trigger a rebuild, and inspect exactly what a
- * Brief version contains. No authentication — this binds to localhost only; OIDC is a later milestone.
+ * Brief version contains.
+ *
+ * <p>Every route here sits behind the browser OIDC profile installed on the {@code /app} prefix, so an
+ * unauthenticated visitor is redirected to the provider and never reaches a handler. Authorization is a different
+ * question and still has only one answer: any user registered for the Agency's FusionAuth Application can do
+ * everything on these pages.
  */
 public class OrganizationController {
+  private final OIDC<User> oidc;
   private final JTETemplates templates;
 
-  public OrganizationController(JTETemplates templates) {
+  public OrganizationController(OIDC<User> oidc, JTETemplates templates) {
+    this.oidc = oidc;
     this.templates = templates;
   }
 
@@ -66,7 +74,7 @@ public class OrganizationController {
 
     var source = Services.databaseService().findSource(organization.id()).orElse(null);
     var versions = Services.databaseService().listBriefs(organization.id());
-    templates.html("pages/detail.jte", req, res, new OrganizationDetailView(organization, source, versions));
+    render("pages/detail.jte", req, res, new OrganizationDetailView(organization, source, versions));
   }
 
   public void file(HTTPRequest req, HTTPResponse res) throws IOException {
@@ -107,7 +115,7 @@ public class OrganizationController {
       return;
     }
 
-    templates.html("pages/file.jte", req, res, new BriefFileView(organization, version, file, text, bytes.length));
+    render("pages/file.jte", req, res, new BriefFileView(organization, version, file, text, bytes.length));
   }
 
   public void list(HTTPRequest req, HTTPResponse res) throws IOException {
@@ -132,7 +140,7 @@ public class OrganizationController {
           source == null ? null : source.lastPolledInstant());
     }).toList();
 
-    templates.html("pages/organizations.jte", req, res, new OrganizationsView(rows));
+    render("pages/organizations.jte", req, res, new OrganizationsView(rows));
   }
 
   public void newForm(HTTPRequest req, HTTPResponse res) throws IOException {
@@ -185,7 +193,7 @@ public class OrganizationController {
 
     var view = new BriefVersionView(organization, brief.version(), brief.checksum(), brief.sourceCommit(),
         brief.insertInstant(), entries);
-    templates.html("pages/version.jte", req, res, view);
+    render("pages/version.jte", req, res, view);
   }
 
   private Organization findOrganization(HTTPRequest req) {
@@ -204,9 +212,26 @@ public class OrganizationController {
     return Services.databaseService().findOrganization(id).orElse(null);
   }
 
+  /**
+   * Renders a page with its own view model plus the signed-in user, which the shared layout needs on every page to
+   * draw the chrome. Going through one helper is what keeps that from being a thing each handler has to remember:
+   * forgetting it is not a compile error, it is a template that fails to render at runtime.
+   *
+   * @param template The template name.
+   * @param req      The request.
+   * @param res      The response.
+   * @param model    The page's own view model, bound as {@code model}.
+   * @throws IOException If the response cannot be written.
+   */
+  private void render(String template, HTTPRequest req, HTTPResponse res, Object model) throws IOException {
+    templates.html(template, req, res, Map.of("model", model, "viewer", oidc.user()));
+  }
+
   private void renderForm(HTTPRequest req, HTTPResponse res, List<String> errors, String name, String path)
       throws IOException {
     res.setStatus(200);
-    templates.html("pages/new.jte", req, res, Map.of("errors", errors, "name", name, "path", path));
+    // Not render(): this page's parameters are three separate values rather than one view model, so its map is
+    // built here. The viewer still has to be in it, for the same layout.
+    templates.html("pages/new.jte", req, res, Map.of("errors", errors, "name", name, "path", path, "viewer", oidc.user()));
   }
 }

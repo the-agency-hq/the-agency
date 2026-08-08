@@ -1,8 +1,10 @@
+@import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.BriefVersionView
 
 @param BriefVersionView model
+@param User viewer
 
-@template.layout.main(pageTitle = model.organization().name() + " v" + model.version(), content = @`
+@template.layout.main(viewer = viewer, pageTitle = model.organization().name() + " v" + model.version(), content = @`
   !{String organizationId = model.organization().id().toString();}
   !{String versionBase = "/app/organizations/" + organizationId + "/versions/" + model.version();}
 

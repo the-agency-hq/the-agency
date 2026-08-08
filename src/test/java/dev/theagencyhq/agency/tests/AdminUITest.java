@@ -8,7 +8,6 @@ import module java.base;
 import module org.lattejava.web;
 import module org.testng;
 
-import dev.theagencyhq.agency.service.Services;
 // NOT redundant alongside `import module java.base`: org.testng is an automatic module, so it exports every one of
 // its packages, and one of them declares its own Files. Without this single-type import every use below is
 // "reference to Files is ambiguous". The same collision is why other test classes here import Configuration,
@@ -34,26 +33,31 @@ public class AdminUITest extends BaseTest {
     root = null;
   }
 
+  // Every page in this class is behind the gate, so the session is established once here rather than at the top of
+  // each method. One authorization-code flow per test, and BaseTest ends it afterwards.
+  @BeforeMethod
+  public void signIn() throws Exception {
+    ssrOIDC.login(TEST_EMAIL, TEST_PASSWORD);
+  }
+
   @Test
   public void binaryFileRendersSizeAndDownloadsRawBytes() throws Exception {
     // 0xFF is never a valid UTF-8 leading byte, so BriefBuilder's strict decoder falls back to base64 -- this
     // exercises the binary branch of the file page (size + download link, no inline preview) and the download
     // response itself, neither of which the text-file scenarios above touch.
     var binary = new byte[] {(byte) 0xFF, (byte) 0xFE, 0x00, 0x01, 0x02, (byte) 0x80};
-    root = createBinarySourceRepository("logo.bin", binary);
+    root = createBinarySourceRepository(binary);
     var organizationId = createOrganization("admin-ui-binary-" + UUID.randomUUID(), root.toString());
 
     rebuild(organizationId);
 
     test.get("/app/organizations/" + organizationId + "/versions/1")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("base64"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains("base64"));
 
     test.get("/app/organizations/" + organizationId + "/versions/1/files/0")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("binary and cannot be previewed").contains("?download=true"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains("binary and cannot be previewed").contains("?download=true"));
 
     // The download link reuses the current request's own path plus ?download=true rather than embedding raw bytes
     // in the HTML page, so the raw-bytes round trip is a separate request against that same URL.
@@ -61,8 +65,7 @@ public class AdminUITest extends BaseTest {
         .assertStatus(200)
         .assertHeader("Content-Disposition", "attachment; filename=\"logo.bin\"")
         .assertHeader("Content-Type", "application/octet-stream")
-        .assertResponse(r -> assertEquals(r.body(), binary))
-        .reset();
+        .assertResponse(r -> assertEquals(r.body(), binary));
   }
 
   @Test
@@ -72,8 +75,7 @@ public class AdminUITest extends BaseTest {
 
     test.get("/app/organizations/new")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("action=\"/app/organizations/\"").contains("method=\"post\""))
-        .reset();
+        .assertBodyAs(string, b -> b.contains("action=\"/app/organizations/\"").contains("method=\"post\""));
 
     var organizationId = createOrganization(name, root.toString());
 
@@ -81,19 +83,16 @@ public class AdminUITest extends BaseTest {
 
     test.get("/app/organizations/" + organizationId)
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("/organizations/" + organizationId + "/versions/1"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains("/organizations/" + organizationId + "/versions/1"));
 
     test.get("/app/organizations/" + organizationId + "/versions/1")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains(".claude/rules/a.md").contains("r--------"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains(".claude/rules/a.md").contains("r--------"));
 
     // Files are sorted by path, and ".claude/..." sorts before ".codex/...", so the claude copy is index 0.
     test.get("/app/organizations/" + organizationId + "/versions/1/files/0")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains(".claude/rules/a.md").contains("first"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains(".claude/rules/a.md").contains("first"));
   }
 
   @Test
@@ -108,8 +107,7 @@ public class AdminUITest extends BaseTest {
     test.get("/app/organizations/" + organizationId)
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("Organization id")
-                                    .contains("data-copy=\"" + organizationId + "\""))
-        .reset();
+                                    .contains("data-copy=\"" + organizationId + "\""));
   }
 
   @Test
@@ -124,8 +122,7 @@ public class AdminUITest extends BaseTest {
 
     test.get("/app/organizations/" + organizationId + "/versions/1/files/0")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("&lt;script&gt;").doesNotContain("<script>alert(1)</script>"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains("&lt;script&gt;").doesNotContain("<script>alert(1)</script>"));
   }
 
   @Test
@@ -144,8 +141,7 @@ public class AdminUITest extends BaseTest {
         .assertStatus(200)
         // The version cell and the pull error, not their markup: every element on this page carries Tailwind
         // classes now, so matching a bare tag would break on any styling change rather than on a behaviour change.
-        .assertBodyAs(string, b -> b.contains(">1</td>").contains("Pull error:"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains(">1</td>").contains("Pull error:"));
 
     // Break the source and re-poll, so lastError is populated too.
     Files.delete(root.resolve("the-agency-hq-settings.json"));
@@ -155,24 +151,19 @@ public class AdminUITest extends BaseTest {
 
     test.get("/app/organizations/")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("BUILD_FAILED").contains("Build error:"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains("BUILD_FAILED").contains("Build error:"));
   }
 
   @Test
   public void malformedOrganizationIdIs404() {
     test.get("/app/organizations/not-a-uuid")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
     test.post("/app/organizations/not-a-uuid/rebuild")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
     test.get("/app/organizations/not-a-uuid/versions/1")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
     test.get("/app/organizations/not-a-uuid/versions/1/files/0")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
   }
 
   @Test
@@ -184,22 +175,17 @@ public class AdminUITest extends BaseTest {
 
     // Non-integer and out-of-range version.
     test.get("/app/organizations/" + organizationId + "/versions/not-a-number")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
     test.get("/app/organizations/" + organizationId + "/versions/999")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
 
     // Non-integer, negative, and out-of-range file index against the real version 1 (which has exactly 2 files).
     test.get("/app/organizations/" + organizationId + "/versions/1/files/not-a-number")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
     test.get("/app/organizations/" + organizationId + "/versions/1/files/-1")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
     test.get("/app/organizations/" + organizationId + "/versions/1/files/999")
-        .assertStatus(404)
-        .reset();
+        .assertStatus(404);
   }
 
   @Test
@@ -213,12 +199,16 @@ public class AdminUITest extends BaseTest {
         .withFormField("path", root.toString())
         .post("/app/organizations/")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("is not a Git repository"))
-        .reset();
+        .assertBodyAs(string, b -> b.contains("is not a Git repository"));
 
     assertEquals(db.listOrganizations().stream().filter(o -> o.name().equals(name)).count(), 0L);
   }
 
+  /**
+   * {@code /} is outside the gated {@code /app} prefix and redirects for everyone; the page it points at is what
+   * then demands a session. {@link AdminUIAuthenticationTest#everyAdminPathIsGated} covers the anonymous side of
+   * that, since this class signs in before every method.
+   */
   @Test
   public void rootRedirectsToTheListing() {
     test.get("/")

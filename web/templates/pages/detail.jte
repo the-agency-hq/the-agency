@@ -1,9 +1,11 @@
+@import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.Brief
 @import dev.theagencyhq.agency.model.view.OrganizationDetailView
 
 @param OrganizationDetailView model
+@param User viewer
 
-@template.layout.main(pageTitle = model.organization().name(), content = @`
+@template.layout.main(viewer = viewer, pageTitle = model.organization().name(), content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(

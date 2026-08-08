@@ -10,6 +10,7 @@ module dev.theagencyhq.agency {
   requires org.jooq;
   requires org.lattejava.database;
   requires org.lattejava.http;
+  requires org.lattejava.jwt;
   requires org.lattejava.version;
   requires org.lattejava.web;
   requires org.postgresql.jdbc;

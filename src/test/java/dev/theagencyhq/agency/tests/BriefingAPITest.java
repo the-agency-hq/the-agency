@@ -45,26 +45,25 @@ public class BriefingAPITest extends BaseTest {
    * answer {@code 304} and the Handler would serve that Brief forever.
    */
   @Test
-  public void aDeletedOrganizationForcesA200() {
+  public void aDeletedOrganizationForcesA200() throws Exception {
     briefing(orgRequest(organization.id(), 1, "sum-1") + "," + orgRequest(UUID.randomUUID(), 3, "sum-gone"))
         .assertStatus(200)
         // Nothing is stale -- the only Organization that exists was asserted correctly -- so the 200 is forced
         // purely by the set comparison, and it carries no Briefs.
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of())))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of())));
   }
 
   @Test
-  public void absentBodyIsTreatedAsAnEmptyAssertion() {
+  public void absentBodyIsTreatedAsAnEmptyAssertion() throws Exception {
     // Design §10.2: a request with no body at all means "I hold nothing", identical to {"currentVersions":[]}.
     // BriefingController implements that with `body == null ? List.of() : body.currentVersions()`, and every other
     // test in this class sends a body -- so that branch had no coverage at all. The assertions are deliberately the
     // same ones coldStoreReceivesTheBrief makes, because "the same result" is the whole claim.
-    test.withHeader("Authorization", "Bearer test-token")
+    var tokens = apiOIDC.login(TEST_EMAIL, TEST_PASSWORD, TEST_REDIRECT_URI);
+    test.withHeader("Authorization", "Bearer " + tokens.accessToken())
         .post("/api/v1/briefing")
         .assertStatus(200)
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))));
   }
 
   /**
@@ -72,48 +71,83 @@ public class BriefingAPITest extends BaseTest {
    * long as it stays unbuilt.
    */
   @Test
-  public void anUnbuiltOrganizationDoesNotBlockA304() {
+  public void anUnbuiltOrganizationDoesNotBlockA304() throws Exception {
     insertOrganization();
 
     briefing(orgRequest(organization.id(), 1, "sum-1"))
-        .assertStatus(304)
-        .reset();
+        .assertStatus(304);
   }
 
   @Test
-  public void coldStoreReceivesTheBrief() {
+  public void coldStoreReceivesTheBrief() throws Exception {
     briefing("")
         .assertStatus(200)
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))));
   }
 
   @Test
-  public void currentVersionIsNotModified() {
+  public void currentVersionIsNotModified() throws Exception {
     briefing(orgRequest(organization.id(), 1, "sum-1"))
         .assertStatus(304)
         // 304 carries no body per HTTP -- nothing on that path should write one. Asserted as a string because an
         // empty body is not JSON and the JSON asserter would fail to parse it.
-        .assertBodyAs(string, StringBodyAsserter::isEmpty)
-        .reset();
+        .assertBodyAs(string, StringBodyAsserter::isEmpty);
   }
 
   @Test
-  public void duplicateAssertionIsRejected() {
+  public void duplicateAssertionIsRejected() throws Exception {
     var entry = orgRequest(organization.id(), 1, "sum-1");
 
     briefing(entry + "," + entry)
-        .assertStatus(400)
-        .reset();
+        .assertStatus(400);
   }
 
+  /**
+   * The middleware's refresh path, which nothing else covers. An access token the server cannot verify, presented with
+   * a refresh token, makes the middleware exchange that refresh token at the provider's token endpoint — authenticating
+   * as a confidential client with HTTP Basic and {@code fusionauth.clientSecret} — and serve the request with the
+   * refreshed token rather than answering {@code 401}.
+   *
+   * <p>Every other request in this suite carries an access token that verifies locally against the JWKS and never
+   * reaches the provider mid-request. (The configured secret itself is not what this pins down: a wrong one already
+   * fails the fixture's token exchange in {@code @BeforeSuite} and skips the entire suite.)
+   */
+  @Test
+  public void expiredTokenWithARefreshTokenIsRefreshed() throws Exception {
+    var tokens = apiOIDC.login(TEST_EMAIL, TEST_PASSWORD, TEST_REDIRECT_URI);
+    test.withHeader("Authorization", "Bearer not-a-token-the-server-can-verify")
+        .withHeader("X-Refresh-Token", tokens.refreshToken())
+        .withHeader("Content-Type", "application/json")
+        .withBody("{\"currentVersions\":[]}")
+        .post("/api/v1/briefing")
+        .assertStatus(200)
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))));
+  }
+
+  /**
+   * A body that could never parse, sent with no token. The answer must be {@code 401} rather than {@code 400}: Web runs
+   * prefix middleware ahead of a route's {@code BodySupplier}, so the server never parses a body it has no reason to
+   * trust. Nothing else in this suite pins that ordering, and swapping it would leak the shape of the API to callers
+   * who cannot authenticate.
+   */
+  @Test
+  public void malformedBodyWithoutTokenIsUnauthorized() {
+    test.withHeader("Content-Type", "application/json")
+        .withBody("not json at all")
+        .post("/api/v1/briefing")
+        .assertStatus(401);
+  }
+
+  /**
+   * No {@code Authorization} header at all. Answered by the OIDC middleware installed on the {@code /api} prefix, so it
+   * never reaches the controller.
+   */
   @Test
   public void missingTokenIsUnauthorized() {
     test.withHeader("Content-Type", "application/json")
         .withBody("{\"currentVersions\":[]}")
         .post("/api/v1/briefing")
-        .assertStatus(401)
-        .reset();
+        .assertStatus(401);
   }
 
   // Seeded per method, not per class: BaseTest empties the database before each one, so a @BeforeClass seed would
@@ -136,7 +170,7 @@ public class BriefingAPITest extends BaseTest {
    * {@code DatabaseService} reattaches them on the way out.
    */
   @Test
-  public void storedBriefSurvivesTheRoundTrip() {
+  public void storedBriefSurvivesTheRoundTrip() throws Exception {
     // Replaces the seeded Brief: two versions for one Organization would make the latest ambiguous to read back.
     resetDatabase();
     organization = insertOrganization();
@@ -144,8 +178,7 @@ public class BriefingAPITest extends BaseTest {
 
     briefing("")
         .assertStatus(200)
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(withFiles))))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(withFiles))));
   }
 
   /**
@@ -156,7 +189,7 @@ public class BriefingAPITest extends BaseTest {
    * boundary ({@code UUID::compareTo} reads {@code mostSigBits} as signed).
    */
   @Test
-  public void twoOrganizationsPairIdsWithBriefsInOneOrdering() {
+  public void twoOrganizationsPairIdsWithBriefsInOneOrdering() throws Exception {
     var organizationB = insertOrganization();
     var briefB = insertBrief(organizationB, "sum-2");
 
@@ -164,8 +197,7 @@ public class BriefingAPITest extends BaseTest {
         .assertStatus(200)
         // Record equality on both Lists is positional, so this asserts the pairing directly: the expected response
         // is built by sorting both arrays the same way, and any disagreement between them fails here.
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization, organizationB), List.of(storedBrief, briefB))))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization, organizationB), List.of(storedBrief, briefB))));
   }
 
   /**
@@ -174,59 +206,64 @@ public class BriefingAPITest extends BaseTest {
    * for an Organization that is merely waiting on its first build.
    */
   @Test
-  public void unbuiltOrganizationsStillAppearInOrganizationIds() {
+  public void unbuiltOrganizationsStillAppearInOrganizationIds() throws Exception {
     var unbuilt = insertOrganization();
 
     briefing("")
         .assertStatus(200)
         // Entitled but undeliverable: `unbuilt` is in organizationIds and absent from briefs, and comparing the
         // whole response is what makes "absent from briefs" an assertion rather than something nobody checked.
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization, unbuilt), List.of(storedBrief))))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization, unbuilt), List.of(storedBrief))));
   }
 
+  /**
+   * A bearer token that is not a JWT the configured provider signed, and no {@code X-Refresh-Token} to fall back on.
+   * Local JWKS verification rejects it without a network call and the middleware answers {@code 401} — the counterpart
+   * to {@link #expiredTokenWithARefreshTokenIsRefreshed}, which supplies that fallback.
+   */
   @Test
   public void unknownTokenIsUnauthorized() {
     test.withHeader("Authorization", "Bearer nope")
         .withHeader("Content-Type", "application/json")
         .withBody("{\"currentVersions\":[]}")
         .post("/api/v1/briefing")
-        .assertStatus(401)
-        .reset();
+        .assertStatus(401);
   }
 
   @Test
-  public void unparseableExtraAssertionYieldsAnEmptyBriefsArray() {
+  public void unparseableExtraAssertionYieldsAnEmptyBriefsArray() throws Exception {
     // The real Organization is asserted exactly as stored, so it is not stale, but the unparseable second entry
     // still forces a 200 instead of a 304 (BriefingService's hasUnparseableId).
     briefing(orgRequest(organization.id(), 1, "sum-1") + "," + orgRequest("not-a-uuid", 1, "x"))
         .assertStatus(200)
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of())))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of())));
   }
 
   @Test
-  public void wrongChecksumResends() {
+  public void wrongChecksumResends() throws Exception {
     briefing(orgRequest(organization.id(), 1, "corrupt"))
         .assertStatus(200)
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))));
   }
 
   @Test
-  public void wrongVersionResends() {
+  public void wrongVersionResends() throws Exception {
     briefing(orgRequest(organization.id(), 0, "sum-old"))
         .assertStatus(200)
-        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))))
-        .reset();
+        .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON, briefingResponse(List.of(organization), List.of(storedBrief))));
   }
 
   /**
    * @param currentVersions The {@code currentVersions} entries, already comma-joined; empty for "I hold nothing".
    * @return The asserter for the response, for the caller to chain status and body assertions onto.
    */
-  private WebTestAsserter briefing(String currentVersions) {
-    return test.withHeader("Authorization", "Bearer test-token")
+  private WebTestAsserter briefing(String currentVersions) throws Exception {
+    // Cleared first rather than after: the headers this sets accumulate on the shared tester, so a second call in
+    // one method would otherwise send two Authorization and two Content-Type headers.
+    test.clearRequestState();
+
+    var tokens = apiOIDC.login(TEST_EMAIL, TEST_PASSWORD, TEST_REDIRECT_URI);
+    return test.withHeader("Authorization", "Bearer " + tokens.accessToken())
                .withHeader("Content-Type", "application/json")
                .withBody("{\"currentVersions\":[" + currentVersions + "]}")
                .post("/api/v1/briefing");

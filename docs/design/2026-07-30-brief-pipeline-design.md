@@ -5,6 +5,13 @@ Date: 2026-07-30
 Source: `docs/idea.md`
 Consumer: `../handler` (already implemented — see `../handler/docs/design/2026-07-26-handler-core-sync-design.md`)
 
+> **Partly superseded.** Both faces of the Agency authenticate against FusionAuth now. The Briefing API no longer
+> validates a configured list of static bearer tokens but OAuth access tokens, and the admin UI is no longer
+> unauthenticated but sits behind a browser session. That replaces decision 2, the `handler.tokens` half of §6,
+> §10.1, and the premise of §11 — see `docs/design/2026-08-06-oauth-authentication-design.md`. Everything else here
+> still describes the shipped system, including the whole of §10.2, which the change did not touch. §10.4 is still
+> pending: entitlements remain "every Organization".
+
 ## 1. Purpose
 
 The Agency is the central application that authors, versions, and distributes Briefs. This milestone builds the
@@ -24,15 +31,19 @@ contract exactly; everything else exists to satisfy it.
 - The Brief builder — source layout to Brief file list, including Mission Type resolution
 - Brief versioning, content checksums, and immutable insert-only version history
 - `POST /api/v1/briefing`, matching the Handler's contract byte for byte
-- Bearer token validation against a configured token list
-- An unauthenticated admin UI: Organizations, source Paths, version history, per-file preview
+- Bearer token validation against a configured token list *(superseded — OAuth access tokens, see the 2026-08-06
+  design)*
+- An admin UI: Organizations, source Paths, version history, per-file preview *(shipped unauthenticated; put
+  behind a FusionAuth session on 2026-08-07, see that design)*
 
 **Out of scope — later milestones**
 
 - GitHub App integration. Replaced here by local Paths; the poller is deliberately shaped so a `GitSource`
   abstraction can gain a GitHub implementation without touching the builder or the API.
 - Identity: FusionAuth OIDC login, users, Teams, per-user Organization membership, entitlement-derived
-  `organizationIds`, and the `403` response. §10.4 records exactly where these land.
+  `organizationIds`, and the `403` response. §10.4 records exactly where these land. *(Login arrived on
+  2026-08-06/07 for both the API and the admin UI, along with a `User` record translated from the token. Teams,
+  memberships, entitlements, and the `403` are all still pending.)*
 - Content translation between agent types (concatenating rules into `AGENTS.md`, reshaping skills for Codex).
   Milestone 1 maps paths and never rewrites bytes.
 - Audit logging (GRC), Brief approvals, states, scoping, layering, fleet and drift reporting — all explicitly
@@ -45,7 +56,7 @@ contract exactly; everything else exists to satisfy it.
 | #  | Question                                | Decision                                                                                                                                                                                |
 |----|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 1  | Milestone 1 scope                       | Spine plus a minimal admin UI, including read-only Brief file preview.                                                                                                                  |
-| 2  | Handler authentication                  | Validate the bearer token against a list in the config file. No users, no memberships, no token table.                                                                                  |
+| 2  | Handler authentication                  | ~~Validate the bearer token against a list in the config file.~~ **Superseded 2026-08-06:** FusionAuth OAuth access tokens, validated against the provider's JWKS. Still no users, no memberships, no token table. |
 | 3  | Entitlements                            | A valid token is entitled to **every** Organization in the database. `organizationIds` is therefore the full Organization list. §10.4 covers the migration to real entitlements.        |
 | 4  | Brief translation depth                 | Path mapping only (§8.4). File bytes are never rewritten. The agent-type table is data, so adding an agent type is one entry.                                                           |
 | 5  | Brief `checksum` semantics              | Agency-defined and opaque to the Handler (§9.2). `idea.md` says the Handler SHA-256s its stored JSON; the shipped Handler does not and never will. The shipped Handler wins.            |
@@ -156,7 +167,7 @@ dev.theagencyhq.agency
 ├── db/           DatabaseService, jooq/ (generated)
 ├── error/        ValidationException, MissingException
 ├── model/        Organization, Brief, BriefFile, SourceSettings (@JSON),
-│   │             BriefSource, SourceStatus
+│   │             BriefSource, SourceStatus, User
 │   │             internal/ (generated codecs)
 │   ├── api/      Request and response envelopes: BriefingRequest,
 │   │             BriefingResponse, CurrentVersion                        (all @JSON)
@@ -164,9 +175,14 @@ dev.theagencyhq.agency
 │   └── view/     OrganizationsView, OrganizationDetailView, BriefVersionView, BriefFileView
 ├── service/      Services, OrganizationService, BriefSourceService, BriefService,
 │                 BriefBuilder, GitService, PollerService, BriefingService,
-│                 validation/
+│                 UserService, validation/
 └──               Main
 ```
+
+`User` and `UserService` are the two exceptions to the shape above, both added on 2026-08-06 with OAuth
+authentication. `User` is in `model/` but is not a database row and carries no `@JSON` — it is built from the claims
+of the access token on the request. `UserService` is in `service/` but is not a registered singleton: it is static,
+because it holds nothing but the claim names. Both mirror `latte-java/app`.
 
 `model/api/` holds only the request and response envelopes of `POST /api/v1/briefing` — the types that exist
 because there is an HTTP endpoint. What those envelopes carry (`Brief`, `BriefFile`, `Organization`) lives in
@@ -200,15 +216,15 @@ read from a chain of properties files with environment-variable overrides.
 db.url=jdbc:postgresql://127.0.0.1:5432/agency
 db.username=dev
 db.password=dev
-handler.tokens=dev-token-one,dev-token-two
+fusionauth.clientId=fa83bc7c-f1c5-48af-8ecb-6c09cf766d73
+fusionauth.issuer=http://localhost:9016
 poller.enabled=true
 poller.intervalSeconds=60
 ```
 
 - `db.url`, `db.username`, `db.password` — required.
-- `handler.tokens` — required, comma-separated. Entries are trimmed; blanks are dropped. An empty resulting set is
-  a startup failure rather than a server that accepts nothing, because the latter is indistinguishable at runtime
-  from a wrong token and would cost an afternoon to diagnose.
+- `fusionauth.clientId`, `fusionauth.issuer` — required. These replaced `handler.tokens` on 2026-08-06; see
+  §6 of `docs/design/2026-08-06-oauth-authentication-design.md`.
 - `poller.intervalSeconds` — optional, default `60`, clamped to a minimum of `5`.
 - `poller.enabled` — optional, default `true`. Whether the poller thread starts. The tests set it to `false` and
   drive `IntervalThread.testRun()` explicitly so a background cycle can never race an assertion.
@@ -218,8 +234,9 @@ The port is a `Main` constructor parameter rather than a constant read at startu
 collision that surfaced as every HTTP test class failing in configuration with "one of the listeners threw an
 exception", which reads like a broken build rather than an occupied port.
 
-Tests read `src/test/resources/config.properties` ahead of the user's file so they point at `agency_test` and a
-fixed token set, exactly as `latte-java/app` does.
+Tests read `src/test/resources/config.properties` ahead of the user's file so they point at `agency_test`, exactly
+as `latte-java/app` does. They do not override the `fusionauth.*` settings: the tests authenticate against the same
+local provider the development server does.
 
 ## 7. Brief sources and polling
 
@@ -505,12 +522,20 @@ lock or `SERIALIZABLE` isolation, neither of which is worth it while a single po
 
 ### 10.1 Authentication
 
-`Authorization: Bearer <token>` is required. The token is compared against the configured set with
-`MessageDigest.isEqual` over UTF-8 bytes, iterating the whole set rather than short-circuiting on the first match,
-so neither the comparison nor the loop leaks timing information. A missing header, a header that is not
-`Bearer <token>`, or an unknown token returns `401` with no body.
+**Superseded 2026-08-06.** `Authorization: Bearer <token>` is still required, but the token is now a FusionAuth
+OAuth access token verified against the provider's JWKS by Latte Web's API-mode OIDC middleware, installed on the
+`/api` prefix. A missing header, a header that is not `Bearer <token>`, or a token that fails verification returns
+`401` with no body, as before. See `docs/design/2026-08-06-oauth-authentication-design.md`.
 
 The token is never logged, at any level.
+
+<details>
+<summary>The retired scheme, for the record</summary>
+
+The token was compared against the set configured in `handler.tokens` with `MessageDigest.isEqual` over UTF-8
+bytes, iterating the whole set rather than short-circuiting on the first match, so neither the comparison nor the
+loop leaked timing information.
+</details>
 
 ### 10.2 The decision
 
@@ -588,7 +613,8 @@ document would be work proportional to the whole fleet.
 
 Contained entirely within §10.1 and the definition of `entitled` in §10.2:
 
-- `BriefingController` resolves the token to a user instead of a boolean.
+- ~~`BriefingController` resolves the token to a user instead of a boolean.~~ **Done 2026-08-06.** The OIDC
+  middleware binds the verified JWT to the request, and `OIDC.jwt().subject()` is the FusionAuth user id.
 - `entitled` becomes that user's Organization memberships instead of every Organization.
 - `403` becomes reachable, for a valid token whose user belongs to no Organization.
 
@@ -597,8 +623,12 @@ nothing else in the decision changes.
 
 ## 11. Admin UI
 
-Server-rendered JTE, no authentication (decision 1), bound to localhost. Trailing slashes on listing pages only,
-per `web-conventions.md`.
+Server-rendered JTE, ~~no authentication (decision 1)~~, bound to localhost. Trailing slashes on listing pages
+only, per `web-conventions.md`.
+
+> **Superseded 2026-08-07.** `/app/**` now sits behind a FusionAuth browser session, and the page chrome carries
+> the signed-in user and a sign-out control. See `docs/design/2026-08-06-oauth-authentication-design.md`. The
+> localhost bind survives the change, for the reason recorded below.
 
 ### 11.1 Styling
 
@@ -639,12 +669,16 @@ real fix and are not done here.
 Because every element now carries utility classes, tests assert on content rather than on markup — matching a bare
 tag like `<td>1</td>` would break on a styling change instead of a behaviour change.
 
-"Bound to localhost" is the entire justification for having no authentication, so it is bound explicitly rather
+"Bound to localhost" was the entire justification for having no authentication, so it is bound explicitly rather
 than by default: `Main` starts the server with `new HTTPListenerConfiguration(InetAddress.getLoopbackAddress(),
 PORT)`, not `Web.start(int)`, whose default listener binds every interface. Anyone who could reach this port could
 otherwise register an Organization pointing at an arbitrary local directory, make the Agency run `git pull` inside
-it, and read and download any file the resulting Brief contains. When OIDC arrives (§10.4), this constraint can be
-relaxed — not before.
+it, and read and download any file the resulting Brief contains.
+
+**Amended 2026-08-07.** Authentication arrived, so that justification no longer applies — but the bind did not
+change, because a second one took its place: there is no TLS listener, and session cookies are marked `Secure`
+only on an https request. Off loopback, over plain http, every admin session would travel in the clear. The bind
+widens when there is a TLS listener to widen it onto.
 
 | Route                                                                | Purpose                                                     |
 |----------------------------------------------------------------------|-------------------------------------------------------------|

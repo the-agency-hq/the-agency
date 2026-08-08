@@ -115,6 +115,17 @@
     <orderEntry type="module-library">
       <library>
         <CLASSES>
+          <root url="jar://$USER_HOME$/.cache/latte/org/lattejava/jwt/0.2.0/jwt-0.2.0.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES>
+          <root url="jar://$USER_HOME$/.cache/latte/org/lattejava/jwt/0.2.0/jwt-0.2.0-src.jar!/" />
+        </SOURCES>
+      </library>
+    </orderEntry>
+    <orderEntry type="module-library">
+      <library>
+        <CLASSES>
           <root url="jar://$USER_HOME$/.m2/repository/org/postgresql/postgresql/42.7.11/postgresql-42.7.11.jar!/" />
         </CLASSES>
         <JAVADOC />
@@ -197,17 +208,6 @@
         <JAVADOC />
         <SOURCES>
           <root url="jar://$USER_HOME$/.m2/repository/org/webjars/jquery/3.7.1/jquery-3.7.1-sources.jar!/" />
-        </SOURCES>
-      </library>
-    </orderEntry>
-    <orderEntry type="module-library" scope="RUNTIME">
-      <library>
-        <CLASSES>
-          <root url="jar://$USER_HOME$/.cache/latte/org/lattejava/jwt/0.2.0/jwt-0.2.0.jar!/" />
-        </CLASSES>
-        <JAVADOC />
-        <SOURCES>
-          <root url="jar://$USER_HOME$/.cache/latte/org/lattejava/jwt/0.2.0/jwt-0.2.0-src.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>

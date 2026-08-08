@@ -1,5 +1,12 @@
+@import dev.theagencyhq.agency.model.User
+
 @param String pageTitle
+@param User viewer
 @param gg.jte.Content content
+
+<%-- Username when FusionAuth has one for this user, email otherwise. Both arrive as claims, so either can be
+     absent depending on how the provider is configured, and the chrome should not render a blank space. --%>
+!{String viewerName = viewer.username() != null ? viewer.username() : viewer.email();}
 
 <!doctype html>
 <html lang="en" class="scroll-smooth">
@@ -29,6 +36,14 @@
       <div class="flex items-center gap-2">
         <a href="/app/organizations/" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors px-2 py-1">Organizations</a>
         @template.components.theme-toggle()
+        <div class="flex items-center gap-2 border-l border-slate-200 dark:border-navy-800 pl-2 ml-1">
+          <span class="hidden sm:inline max-w-40 truncate text-sm text-slate-600 dark:text-slate-300" title="${viewer.email()}">${viewerName}</span>
+          <!-- POST, not a link: a GET logout is followed by link prefetchers and page scanners, which would sign
+               people out sideways. form-action in the CSP is 'self', and this posts to our own /logout. -->
+          <form method="post" action="/logout">
+            <button type="submit" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors px-2 py-1">Sign out</button>
+          </form>
+        </div>
       </div>
     </div>
   </div>
@@ -41,7 +56,7 @@
 <footer class="border-t border-slate-200 dark:border-navy-800 mt-16">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <p class="text-xs text-slate-500 dark:text-slate-400">
-      The Agency — administration. Bound to localhost; every visitor here is fully privileged.
+      The Agency — administration. Signed in as ${viewerName}; every registered user here is fully privileged.
     </p>
   </div>
 </footer>

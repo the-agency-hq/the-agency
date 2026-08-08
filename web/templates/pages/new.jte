@@ -1,10 +1,12 @@
+@import dev.theagencyhq.agency.model.User
 @import java.util.List
 
 @param List<String> errors = List.of()
 @param String name = ""
 @param String path = ""
+@param User viewer
 
-@template.layout.main(pageTitle = "New Organization", content = @`
+@template.layout.main(viewer = viewer, pageTitle = "New Organization", content = @`
   @template.components.page-header(
       label = "Register",
       title = "New Organization",

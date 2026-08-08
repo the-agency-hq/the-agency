@@ -1,0 +1,166 @@
+{
+  "variables": {
+    "adminEmail": "admin@theagencyhq.dev",
+    "adminPassword": "password",
+    "adminUserId": "#{UUID()}",
+    "agencyApplicationId": "7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742",
+    "agencyClientSecret": "super-secret-secret-that-should-be-regenerated-for-production",
+    "apiKey": "33052c8a-c283-4e96-9d2a-eb1215c69f8f-not-for-prod",
+    "asymmetricKeyId": "#{UUID()}",
+    "defaultTenantId": "d7d09513-a3f5-401c-9685-34ab6c552453",
+    "handlerApplicationId": "fa83bc7c-f1c5-48af-8ecb-6c09cf766d73",
+    "handlerClientSecret": "super-secret-secret-that-should-be-regenerated-for-production",
+    "accessTokenPopulateLambdaId": "#{UUID()}"
+  },
+  "apiKeys": [
+    {
+      "key": "#{apiKey}",
+      "description": "Unrestricted API key"
+    }
+  ],
+  "requests": [
+    {
+      "method": "POST",
+      "url": "/api/key/generate/#{asymmetricKeyId}",
+      "body": {
+        "key": {
+          "algorithm": "RS256",
+          "name": "For The Agency",
+          "length": 2048
+        }
+      }
+    },
+    {
+      "method": "PATCH",
+      "url": "/api/tenant/#{defaultTenantId}",
+      "body": {
+        "tenant": {
+          "issuer": "http://localhost:9016"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/lambda/#{accessTokenPopulateLambdaId}",
+      "body": {
+        "lambda": {
+          "name": "[The Agency] Access token populate",
+          "type": "JWTPopulate",
+          "engineType": "GraalJS",
+          "body": "function populate(jwt, user, registration) {\n  jwt.preferred_username = user.username;\n  jwt.email = user.email;\n}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/application/#{agencyApplicationId}",
+      "tenantId": "#{defaultTenantId}",
+      "body": {
+        "application": {
+          "name": "The Agency",
+          "oauthConfiguration": {
+            "authorizedRedirectURLs": [
+              "http://localhost:8080/oidc/logout-return",
+              "http://localhost:8080/oidc/return",
+              "http://localhost:8081/oidc/logout-return",
+              "http://localhost:8081/oidc/return"
+            ],
+            "logoutURL": "http://localhost:8080/oidc/logout-return",
+            "clientSecret": "#{agencyClientSecret}",
+            "enabledGrants": [
+              "authorization_code",
+              "refresh_token"
+            ],
+            "generateRefreshTokens": true,
+            "requireRegistration": true
+          },
+          "jwtConfiguration": {
+            "enabled": true,
+            "accessTokenKeyId": "#{asymmetricKeyId}",
+            "idTokenKeyId": "#{asymmetricKeyId}"
+          },
+          "lambdaConfiguration": {
+            "accessTokenPopulateId": "#{accessTokenPopulateLambdaId}"
+          },
+          "roles": [
+            {"name": "admin", "isSuperRole": true, "isDefaultRole": false},
+            {"name": "user", "isSuperRole": false, "isDefaultRole": true}
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/application/#{handlerApplicationId}",
+      "tenantId": "#{defaultTenantId}",
+      "body": {
+        "application": {
+          "name": "The Agency Handler",
+          "oauthConfiguration": {
+            "authorizedRedirectURLs": [
+              "http://127.0.0.1:*/callback"
+            ],
+            "authorizedURLValidationPolicy": "AllowWildcards",
+            "clientAuthenticationPolicy": "NotRequired",
+            "clientSecret": "#{handlerClientSecret}",
+            "proofKeyForCodeExchangePolicy": "Required",
+            "consentMode": "NeverPrompt",
+            "enabledGrants": [
+              "authorization_code",
+              "refresh_token"
+            ],
+            "generateRefreshTokens": true,
+            "requireRegistration": true
+          },
+          "jwtConfiguration": {
+            "enabled": true,
+            "accessTokenKeyId": "#{asymmetricKeyId}",
+            "idTokenKeyId": "#{asymmetricKeyId}"
+          },
+          "lambdaConfiguration": {
+            "accessTokenPopulateId": "#{accessTokenPopulateLambdaId}"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "registration": {
+          "applicationId": "#{FUSIONAUTH_APPLICATION_ID}",
+          "roles": [
+            "admin"
+          ]
+        },
+        "skipRegistrationVerification": true,
+        "user": {
+          "email": "#{adminEmail}",
+          "username": "AdminUser",
+          "password": "#{adminPassword}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "registration": {
+          "applicationId": "#{agencyApplicationId}",
+          "roles": [
+            "admin"
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "registration": {
+          "applicationId": "#{handlerApplicationId}"
+        }
+      }
+    }
+  ]
+}

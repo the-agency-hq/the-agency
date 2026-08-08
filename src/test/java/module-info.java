@@ -9,6 +9,7 @@ module dev.theagencyhq.agency.tests {
   requires org.jooq;
   requires org.lattejava.database;
   requires org.lattejava.http;
+  requires org.lattejava.jwt;
   requires org.lattejava.web;
   requires org.testng;
 

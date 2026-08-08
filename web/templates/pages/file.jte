@@ -1,10 +1,12 @@
+@import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.BriefFileView
 @import org.lattejava.http.server.HTTPRequest
 
 @param BriefFileView model
 @param HTTPRequest request
+@param User viewer
 
-@template.layout.main(pageTitle = model.file().path(), content = @`
+@template.layout.main(viewer = viewer, pageTitle = model.file().path(), content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(

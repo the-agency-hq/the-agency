@@ -1,8 +1,10 @@
+@import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.OrganizationsView
 
 @param OrganizationsView model
+@param User viewer
 
-@template.layout.main(pageTitle = "Organizations", content = @`
+@template.layout.main(viewer = viewer, pageTitle = "Organizations", content = @`
   @template.components.page-header(
       label = "Fleet",
       title = "Organizations",

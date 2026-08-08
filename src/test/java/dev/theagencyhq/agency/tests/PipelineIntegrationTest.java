@@ -23,7 +23,6 @@ import static org.testng.Assert.*;
  * the deletion scenario cannot disturb the state scenario 8 still needs; 8 resumes the original Organization to prove a
  * build failure does not roll back what is already being served.
  */
-@SuppressWarnings("ResultOfMethodCallIgnored")
 @Test
 public class PipelineIntegrationTest extends BaseTest {
   private final List<UUID> organizationIds = new ArrayList<>();
@@ -76,15 +75,11 @@ public class PipelineIntegrationTest extends BaseTest {
     assertEquals(after.version(), before.version());
     assertEquals(after.checksum(), before.checksum());
 
-    test.withHeader("Authorization", "Bearer test-token")
-        .withHeader("Content-Type", "application/json")
-        .withBody("{\"currentVersions\":[]}")
-        .post("/api/v1/briefing")
+    briefing("{\"currentVersions\":[]}")
         .assertStatus(200)
         // The whole response: the still-serving Brief, unchanged, and nothing else alongside it.
         .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON,
-            briefingResponse(List.of(organization), List.of(before))))
-        .reset();
+            briefingResponse(List.of(organization), List.of(before))));
   }
 
   private void contentChangeProducesVersionTwo() throws Exception {
@@ -95,15 +90,28 @@ public class PipelineIntegrationTest extends BaseTest {
     assertEquals(db.findLatestBrief(organization.id()).orElseThrow().version(), 2);
   }
 
-  private void corruptChecksumForcesAResend() {
-    test.withHeader("Authorization", "Bearer test-token")
-        .withHeader("Content-Type", "application/json")
-        .withBody(currentVersionsBody(organization.id(), lastVersion, "not-" + lastChecksum))
-        .post("/api/v1/briefing")
+  private void corruptChecksumForcesAResend() throws Exception {
+    briefing(currentVersionsBody(organization.id(), lastVersion, "not-" + lastChecksum))
         .assertStatus(200)
         .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON,
-            briefingResponse(List.of(organization), List.of(db.findLatestBrief(organization.id()).orElseThrow()))))
-        .reset();
+            briefingResponse(List.of(organization), List.of(db.findLatestBrief(organization.id()).orElseThrow()))));
+  }
+
+  /**
+   * One Briefing API call, with the request state it needs and nothing left over. The eight scenarios below run
+   * inside a single test method, so without clearing first the headers of one would ride along on the next — the
+   * tester accumulates them until something empties it.
+   *
+   * @param body The request body.
+   * @return The asserter for the response.
+   */
+  private WebTestAsserter briefing(String body) throws Exception {
+    test.clearRequestState();
+    var tokens = apiOIDC.login(TEST_EMAIL, TEST_PASSWORD, TEST_REDIRECT_URI);
+    return test.withHeader("Authorization", "Bearer " + tokens.accessToken())
+               .withHeader("Content-Type", "application/json")
+                       .withBody(body)
+                       .post("/api/v1/briefing");
   }
 
   private String currentVersionsBody(UUID organizationId, int version, String checksum) {
@@ -134,32 +142,24 @@ public class PipelineIntegrationTest extends BaseTest {
     // The Handler still asserts the exact version/checksum it held before the Organization vanished. The set
     // comparison in BriefingService.decide is what turns that into a 200 instead of a 304 -- without it, a deleted
     // Organization's last Handler would poll forever and never learn the Location should be torn down.
-    test.withHeader("Authorization", "Bearer test-token")
-        .withHeader("Content-Type", "application/json")
-        .withBody(currentVersionsBody(throwaway.id(), brief.version(), brief.checksum()))
-        .post("/api/v1/briefing")
+    briefing(currentVersionsBody(throwaway.id(), brief.version(), brief.checksum()))
         .assertStatus(200)
         // The deleted Organization is absent from the entitled set, which is what tells the Handler to tear its
         // Location down. Comparing the whole response asserts both halves at once: it is gone from
         // organizationIds, and no Brief of its comes along either.
         .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON,
-            briefingResponse(List.of(organization), List.of(db.findLatestBrief(organization.id()).orElseThrow()))))
-        .reset();
+            briefingResponse(List.of(organization), List.of(db.findLatestBrief(organization.id()).orElseThrow()))));
   }
 
-  private void handlerColdStoreReceivesEveryBrief() {
+  private void handlerColdStoreReceivesEveryBrief() throws Exception {
     var brief = db.findLatestBrief(organization.id()).orElseThrow();
     lastVersion = brief.version();
     lastChecksum = brief.checksum();
 
-    test.withHeader("Authorization", "Bearer test-token")
-        .withHeader("Content-Type", "application/json")
-        .withBody("{\"currentVersions\":[]}")
-        .post("/api/v1/briefing")
+    briefing("{\"currentVersions\":[]}")
         .assertStatus(200)
         .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON,
-            briefingResponse(List.of(organization), List.of(brief))))
-        .reset();
+            briefingResponse(List.of(organization), List.of(brief))));
   }
 
   private void registerCommitAndPollProducesVersionOne() throws Exception {
@@ -196,14 +196,10 @@ public class PipelineIntegrationTest extends BaseTest {
     brief.files().forEach(f -> assertEquals(f.mode(), "r--------", "Unexpected mode for [" + f.path() + "]"));
   }
 
-  private void repeatedRequestIsNotModified() {
-    test.withHeader("Authorization", "Bearer test-token")
-        .withHeader("Content-Type", "application/json")
-        .withBody(currentVersionsBody(organization.id(), lastVersion, lastChecksum))
-        .post("/api/v1/briefing")
+  private void repeatedRequestIsNotModified() throws Exception {
+    briefing(currentVersionsBody(organization.id(), lastVersion, lastChecksum))
         .assertStatus(304)
-        .assertBodyAs(string, StringBodyAsserter::isEmpty)
-        .reset();
+        .assertBodyAs(string, StringBodyAsserter::isEmpty);
   }
 
   /**

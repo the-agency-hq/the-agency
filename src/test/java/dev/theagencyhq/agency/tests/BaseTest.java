@@ -36,17 +36,43 @@ import static org.testng.Assert.*;
  */
 public abstract class BaseTest {
   /**
+   * The FusionAuth user every test authenticates as, provisioned by {@code src/main/fusionauth/kickstart}.
+   */
+  public static final String TEST_EMAIL = "admin@theagencyhq.dev";
+  /**
    * A fixed instant for every seeded row. Both instant columns are {@code BIGINT} epoch millis and Organization
    * truncates to that precision, so a fixed millisecond value round-trips through the database unchanged — which
    * lets a test compare a seeded record with one read back, field for field.
    */
   public static final Instant TEST_INSTANT = Instant.ofEpochMilli(1_700_000_000_000L);
+  public static final String TEST_PASSWORD = "password";
   public static final int TEST_PORT = 8081;
+  /**
+   * A loopback redirect the Handler Application accepts. Its registered redirect carries a wildcard port because the
+   * real Handler binds an ephemeral one; nothing listens on this port during a suite run, since the fixture reads
+   * the authorization code off the redirect rather than following it.
+   */
+  public static final String TEST_REDIRECT_URI = "http://127.0.0.1:8888/callback";
+  /**
+   * Where the browser profile's challenge sends an unauthenticated visitor. The default {@code BrowserSettings}
+   * login path, and the {@code Location} an admin UI request without cookies has to carry.
+   */
+  public static final String LOGIN_PATH = "/login";
+  /**
+   * The Briefing API's login fixture, bound to the Handler Application. Distinct from {@link #ssrOIDC} because the
+   * two profiles are two OAuth clients: a token from one carries the wrong {@code aud} for the other, which is the
+   * whole point of keeping the Applications separate.
+   */
+  public static OIDCTestFixture apiOIDC;
   public static BriefingService briefingService;
   public static DatabaseService db;
   public static Main main;
   public static OrganizationService organizationService;
   public static PollerService pollerService;
+  /**
+   * The admin UI's login fixture, bound to the Agency Application.
+   */
+  public static OIDCTestFixture ssrOIDC;
   public static WebTest test = new WebTest(TEST_PORT);
 
   @AfterSuite
@@ -57,13 +83,15 @@ public abstract class BaseTest {
   }
 
   @BeforeSuite
-  public static void beforeSuite() {
+  public static void beforeSuite() throws Exception {
     main = new Main(TEST_PORT, true);
     main.main();
     briefingService = Services.briefingService();
     db = Services.databaseService();
     organizationService = Services.organizationService();
     pollerService = Services.pollerService();
+    apiOIDC = new OIDCTestFixture(test, main.apiConfig);
+    ssrOIDC = new OIDCTestFixture(test, main.ssrConfig, main.ssrSettings);
   }
 
   public static void deleteDirectory(Path directory) throws IOException {
@@ -151,9 +179,30 @@ public abstract class BaseTest {
     db.dsl().execute("DELETE FROM organizations");
   }
 
+  /**
+   * Ends whatever session the method established, as {@code latte-java/app}'s own base class does. A test signs in
+   * once at the top and every request it makes after that is signed in; this is what keeps the session from
+   * outliving the method and quietly authenticating the next one.
+   *
+   * <p>Load-bearing, not decoration: without it {@code anAnonymousVisitorIsSentToLogin} and
+   * {@code everyAdminPathIsGated} both pass on a session some earlier method left behind.
+   *
+   * <p>Named for what it does rather than {@code afterMethod} because {@link AdminUITest} declares one of those: a
+   * subclass method with the same signature would override this one, and the override would silently skip it.
+   */
+  @AfterMethod(alwaysRun = true)
+  public void logoutAfterMethod() {
+    ssrOIDC.logout();
+  }
+
   @BeforeMethod
   public void beforeMethod() throws Exception {
     resetDatabase();
+
+    // The tester is shared by the whole suite and accumulates headers, form fields, and a body until something
+    // clears them. Clearing here means a method starts from nothing, exactly as it starts with an empty database,
+    // so no chain has to end in a reset() purely to protect whatever runs next. Twelve tests fail without it.
+    test.clearRequestState();
   }
 
   protected void commit(Path root, String message) throws Exception {
@@ -161,11 +210,11 @@ public abstract class BaseTest {
     run(root, "git", "commit", "-q", "-m", message);
   }
 
-  protected Path createBinarySourceRepository(String fileName, byte[] content) throws Exception {
+  protected Path createBinarySourceRepository(byte[] content) throws Exception {
     var dir = Files.createDirectories(Path.of("build/test/admin-ui-" + UUID.randomUUID()).toAbsolutePath());
     Files.writeString(dir.resolve("the-agency-hq-settings.json"), "{\"version\":\"1.0.0\"}");
     Files.createDirectories(dir.resolve("rules"));
-    Files.write(dir.resolve("rules/" + fileName), content);
+    Files.write(dir.resolve("rules/" + "logo.bin"), content);
     // initRepository already commits, so committing again here fails with "nothing to commit".
     initRepository(dir);
     return dir;
@@ -178,7 +227,10 @@ public abstract class BaseTest {
         .post("/app/organizations/")
         .assertStatus(303)
         .assertResponse(r -> location.set(r.headers().firstValue("Location").orElseThrow()))
-        .reset();
+        // Request only, never Cookies: the caller signed in once and the rest of its requests still need that
+        // session. What has to go is this method's own form fields, which would otherwise ride along on whatever
+        // the caller asks for next.
+        .reset(ResetItem.Request);
     return UUID.fromString(location.get().substring(location.get().lastIndexOf('/') + 1));
   }
 
@@ -207,8 +259,7 @@ public abstract class BaseTest {
    */
   protected void rebuild(UUID organizationId) {
     test.post("/app/organizations/" + organizationId + "/rebuild")
-        .assertRedirect(303, "/app/organizations/" + organizationId)
-        .reset();
+        .assertRedirect(303, "/app/organizations/" + organizationId);
     Services.pollerService().testRun();
   }
 

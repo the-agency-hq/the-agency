@@ -11,7 +11,6 @@ import module org.testng;
 import dev.theagencyhq.agency.model.Brief;
 import dev.theagencyhq.agency.model.BriefSource;
 import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.internal.BriefJSON;
 import dev.theagencyhq.agency.model.SourceStatus;
 
 import static org.testng.Assert.assertEquals;
@@ -24,23 +23,29 @@ public class BriefRepositoryTest extends BaseTest {
   @Test
   public void insertsAndReadsTheWholeGraph() {
     var now = Instant.ofEpochMilli(1_700_000_000_000L);
-    var organization = new Organization(UUID.randomUUID(), "Acme-" + UUID.randomUUID(), now, now);
+    var organization = new Organization(UUID.randomUUID(), "Acme-" + UUID.randomUUID(), null, now, now);
     db.insertOrganization(organization);
 
     assertEquals(db.findOrganization(organization.id()).orElseThrow().name(), organization.name());
     assertEquals(db.findOrganizationByName(organization.name().toUpperCase(Locale.ROOT))
                          .orElseThrow().id(), organization.id());
 
-    var source = new BriefSource(UUID.randomUUID(), organization.id(), "/tmp/" + UUID.randomUUID(), null, null,
-        null, null, null, now, now);
-    db.insertSource(source);
-    assertEquals(db.findSource(organization.id()).orElseThrow().path(), source.path());
+    var source = new BriefSource(UUID.randomUUID(), organization.id(), "Acme", "briefs-" + UUID.randomUUID(),
+        "main", null, null, null, null, now, now);
+    db.replaceSource(source);
+    var stored = db.findSource(organization.id()).orElseThrow();
+    assertEquals(stored.fullName(), source.fullName());
+    assertEquals(stored.branch(), "main");
 
-    db.updateSourceStatus(organization.id(), "abc123", now, SourceStatus.OK, null, "no remote", now);
+    // Case-insensitively, matching the LOWER() unique index the lookup has to agree with rather than merely
+    // resemble -- GitHub treats `Acme/briefs` and `acme/BRIEFS` as one repository, and so must this.
+    assertEquals(db.findSourceByRepository("acme", source.repository().toUpperCase(Locale.ROOT))
+                   .orElseThrow().id(), source.id());
+
+    db.updateSourceStatus(organization.id(), "abc123", now, SourceStatus.OK, null, now);
     var updated = db.findSource(organization.id()).orElseThrow();
     assertEquals(updated.lastBuiltCommit(), "abc123");
     assertEquals(updated.lastStatus(), SourceStatus.OK);
-    assertEquals(updated.lastPullError(), "no remote");
 
     // insertBrief takes a Brief and owns the serialization, so what goes into the document column and what comes
     // back out of it are the same codec -- the round trip below is what proves that.
@@ -66,7 +71,7 @@ public class BriefRepositoryTest extends BaseTest {
                            .resultQuery("SELECT document FROM briefs WHERE organization_id = ? AND version = 2",
                                organization.id())
                            .fetchOne(0, String.class);
-    var storedShape = BriefJSON.fromJSON(document);
+    var storedShape = Brief.fromJSON(document);
     assertNull(storedShape.version(), document);
     assertNull(storedShape.sourceCommit(), document);
     assertNull(storedShape.insertInstant(), document);

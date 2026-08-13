@@ -5,23 +5,24 @@
 package dev.theagencyhq.agency.tests;
 
 import module java.base;
+import module org.lattejava.fusionauth;
 import module org.lattejava.web;
 import module org.testng;
-import java.nio.file.Files;
 
 import dev.theagencyhq.agency.*;
 import dev.theagencyhq.agency.db.*;
 import dev.theagencyhq.agency.model.*;
 import dev.theagencyhq.agency.model.api.*;
 import dev.theagencyhq.agency.service.*;
+import dev.theagencyhq.agency.tests.github.*;
 import dev.theagencyhq.agency.util.*;
 
 import static org.testng.Assert.*;
 
 /**
  * The base for every test that needs the application: the server, the database, or the service singletons. Pure unit
- * tests — path mapping, JSON shapes, SemVer, the Git wrapper — do not extend this and should not, since booting a
- * server to test a regex is pure cost.
+ * tests — path mapping, JSON shapes, SemVer, the Mission Type resolver — do not extend this and should not, since
+ * booting a server to test a regex is pure cost.
  *
  * <p>One {@link Main} for the whole suite, started in {@code @BeforeSuite}. TestNG runs classes sequentially, and
  * only one of them can bind the port, so per-class startup would be both wasteful and impossible.
@@ -30,9 +31,13 @@ import static org.testng.Assert.*;
  * make every HTTP test class fail in configuration with "one of the listeners threw an exception", which reads like a
  * broken build rather than an occupied port.
  *
- * <p>{@code @BeforeMethod} truncates the database, so every test starts from empty and no test has to bookkeep
- * what it created. {@code organizations} is the only root: {@code brief_sources} and {@code briefs} both cascade from
- * it, so deleting it clears the graph.
+ * <p>GitHub is the one dependency the suite fakes. {@link #github} is an in-memory GitHub, handed to {@code Main} so
+ * every service is built on it; everything else — FusionAuth, Postgres — is the real thing running locally, and the
+ * GitHub credentials these tests store are genuinely written to and read back from the {@code organizations} table.
+ *
+ * <p>{@code @BeforeMethod} truncates the database and empties the fake, so every test starts from empty and no test
+ * has to bookkeep what it created. {@code organizations} is the only root: {@code brief_sources} and {@code briefs}
+ * both cascade from it — and every GitHub credential lives in its columns — so deleting it clears everything.
  */
 public abstract class BaseTest {
   /**
@@ -66,6 +71,8 @@ public abstract class BaseTest {
   public static OIDCTestFixture apiOIDC;
   public static BriefingService briefingService;
   public static DatabaseService db;
+  public static FakeGitHubClient github = new FakeGitHubClient();
+  public static GitHubLinkService links;
   public static Main main;
   public static OrganizationService organizationService;
   public static PollerService pollerService;
@@ -84,26 +91,24 @@ public abstract class BaseTest {
 
   @BeforeSuite
   public static void beforeSuite() throws Exception {
-    main = new Main(TEST_PORT, true);
+    main = new Main(TEST_PORT, true, github);
     main.main();
     briefingService = Services.briefingService();
     db = Services.databaseService();
+    links = Services.gitHubLinkService();
     organizationService = Services.organizationService();
     pollerService = Services.pollerService();
     apiOIDC = new OIDCTestFixture(test, main.apiConfig);
     ssrOIDC = new OIDCTestFixture(test, main.ssrConfig, main.ssrSettings);
-  }
 
-  public static void deleteDirectory(Path directory) throws IOException {
-    if (directory != null && Files.isDirectory(directory)) {
-      try (var walk = Files.walk(directory)) {
-        walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-          if (!p.toFile().delete()) {
-            throw new IllegalStateException("Unable to prune directory [" + directory + "]");
-          }
-        });
-      }
-    }
+    // Not needed for anything the tests do -- they authenticate through the browser and API flows -- but checking
+    // that the Kickstart user exists up front turns "FusionAuth was never provisioned" into one clear message
+    // instead of a login failure in every HTTP test class.
+    var fusionAuth = new FusionAuthClient(main.config.get("fusionauth.apiKey"), main.config.get("fusionauth.baseURL"));
+    var response = fusionAuth.retrieveUser(null, null, null, null, TEST_EMAIL, null);
+    assertNotNull(response, "FusionAuth has no user [" + TEST_EMAIL + "]. Run `docker compose up -d` in "
+        + "src/main/fusionauth, and `docker compose down -v` first if it was provisioned from an older "
+        + "kickstart.json");
   }
 
   /**
@@ -136,9 +141,9 @@ public abstract class BaseTest {
   }
 
   /**
-   * Inserts a Brief for an Organization, straight to the database and without going near the builder or a Git
-   * repository. A test that cares what the Briefing API does with a stored Brief does not also want to care how
-   * one is produced.
+   * Inserts a Brief for an Organization, straight to the database and without going near the builder or a
+   * repository. A test that cares what the Briefing API does with a stored Brief does not also want to care how one
+   * is produced.
    *
    * @param organization The owning Organization.
    * @param checksum     The content checksum, which most callers just need to be distinguishable.
@@ -164,7 +169,7 @@ public abstract class BaseTest {
    * @return The inserted Organization.
    */
   public static Organization insertOrganization(String name) {
-    var organization = new Organization(UUID.randomUUID(), name, TEST_INSTANT, TEST_INSTANT);
+    var organization = new Organization(UUID.randomUUID(), name, null, TEST_INSTANT, TEST_INSTANT);
     db.insertOrganization(organization);
     return organization;
   }
@@ -198,6 +203,7 @@ public abstract class BaseTest {
   @BeforeMethod
   public void beforeMethod() throws Exception {
     resetDatabase();
+    github.reset();
 
     // The tester is shared by the whole suite and accumulates headers, form fields, and a body until something
     // clears them. Clearing here means a method starts from nothing, exactly as it starts with an empty database,
@@ -205,25 +211,33 @@ public abstract class BaseTest {
     test.clearRequestState();
   }
 
-  protected void commit(Path root, String message) throws Exception {
-    run(root, "git", "add", "-A");
-    run(root, "git", "commit", "-q", "-m", message);
+  /**
+   * Registers a repository as an Organization's source through the service, as the connect form does. The
+   * Organization has to hold a GitHub credential first — {@link #linkGitHub(UUID)} — because the connection is
+   * verified against the token it holds.
+   *
+   * @param organizationId The Organization to connect.
+   * @param owner          The repository owner.
+   * @param repository     The repository name.
+   */
+  protected void connect(UUID organizationId, String owner, String repository) {
+    connect(organizationId, owner, repository, "main");
   }
 
-  protected Path createBinarySourceRepository(byte[] content) throws Exception {
-    var dir = Files.createDirectories(Path.of("build/test/admin-ui-" + UUID.randomUUID()).toAbsolutePath());
-    Files.writeString(dir.resolve("the-agency-hq-settings.json"), "{\"version\":\"1.0.0\"}");
-    Files.createDirectories(dir.resolve("rules"));
-    Files.write(dir.resolve("rules/" + "logo.bin"), content);
-    // initRepository already commits, so committing again here fails with "nothing to commit".
-    initRepository(dir);
-    return dir;
+  protected void connect(UUID organizationId, String owner, String repository, String branch) {
+    organizationService.connect(organizationId, links.accessToken(organizationId), owner, repository, branch);
   }
 
-  protected UUID createOrganization(String name, String path) {
+  /**
+   * Posts the name form the way the admin UI does and returns the Organization it created, reading the id off the
+   * redirect to its page.
+   *
+   * @param name The Organization's display name.
+   * @return Its id.
+   */
+  protected UUID createOrganization(String name) {
     var location = new AtomicReference<String>();
     test.withFormField("name", name)
-        .withFormField("path", path)
         .post("/app/organizations/")
         .assertStatus(303)
         .assertResponse(r -> location.set(r.headers().firstValue("Location").orElseThrow()))
@@ -231,24 +245,26 @@ public abstract class BaseTest {
         // session. What has to go is this method's own form fields, which would otherwise ride along on whatever
         // the caller asks for next.
         .reset(ResetItem.Request);
-    return UUID.fromString(location.get().substring(location.get().lastIndexOf('/') + 1));
+
+    // The redirect is to /app/organizations/{id} -- the Organization's own page, which is where everything that
+    // happens next is offered -- so the id is the last segment of the path.
+    var path = location.get();
+    return UUID.fromString(path.substring(path.lastIndexOf('/') + 1));
   }
 
-  protected Path createSourceRepository(String ruleContent) throws Exception {
-    var dir = Files.createDirectories(Path.of("build/test/admin-ui-" + UUID.randomUUID()).toAbsolutePath());
-    Files.writeString(dir.resolve("the-agency-hq-settings.json"), "{\"version\":\"1.0.0\"}");
-    Files.createDirectories(dir.resolve("rules"));
-    Files.writeString(dir.resolve("rules/a.md"), ruleContent);
-    initRepository(dir);
-    return dir;
-  }
-
-  protected void initRepository(Path root) throws Exception {
-    run(root, "git", "init", "-q", "-b", "main");
-    run(root, "git", "config", "user.email", "test@theagencyhq.dev");
-    run(root, "git", "config", "user.name", "Test");
-    run(root, "git", "config", "commit.gpgsign", "false");
-    commit(root, "initial");
+  /**
+   * Gives an Organization a GitHub authorization, by running the real link flow with the fake GitHub's canned code
+   * exchange. The credential that results lands in the {@code organizations} columns — the same ones the poller
+   * reads — so nothing here stubs out the half of the mechanism most worth exercising.
+   *
+   * @param organizationId The Organization to connect.
+   * @return The access token now stored against the Organization.
+   */
+  protected String linkGitHub(UUID organizationId) {
+    var result = links.link(organizationId, "test-code",
+        "http://localhost:" + TEST_PORT + "/app/oauth/github/callback");
+    assertEquals(result, GitHubLinkService.LinkResult.LINKED);
+    return links.accessToken(organizationId);
   }
 
   /**
@@ -263,16 +279,16 @@ public abstract class BaseTest {
     Services.pollerService().testRun();
   }
 
-  protected void run(Path directory, String... command) throws Exception {
-    var process = new ProcessBuilder(command).directory(directory.toFile()).redirectErrorStream(true).start();
-    var output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-    assertEquals(process.waitFor(), 0, "[" + String.join(" ", command) + "] -> [" + output + "]");
-  }
-
-  protected Path write(Path root, String relative, String content) throws IOException {
-    var path = root.resolve(relative);
-    Files.createDirectories(path.getParent());
-    Files.writeString(path, content);
-    return path;
+  /**
+   * Runs one real cycle and reports the status it recorded for one Organization. The status is read back off the
+   * {@code brief_sources} row rather than returned by the call, which is the stronger assertion: it proves the
+   * status was persisted, not merely computed.
+   *
+   * @param organizationId The Organization whose row to read.
+   * @return The status the cycle recorded for it.
+   */
+  protected SourceStatus runCycle(UUID organizationId) {
+    pollerService.testRun();
+    return db.findSource(organizationId).orElseThrow().lastStatus();
   }
 }

@@ -9,6 +9,8 @@ import module dev.theagencyhq.agency;
 import module org.lattejava.http;
 import module org.lattejava.web;
 
+import dev.theagencyhq.agency.model.api.internal.*;
+
 /**
  * {@code POST /api/v1/briefing} — the endpoint every Handler polls.
  *
@@ -70,7 +72,7 @@ public class BriefingController {
     // The user id, not the email or username: it is the member the entitled set will eventually be derived from
     // (design §10.4), it is stable across a profile change, and it is the least revealing of the three. The access
     // token it all came from is never logged, at any level.
-    logger.log(System.Logger.Level.DEBUG, "Briefing response for user [" + user.userId() + "] with ["
-        + updated.briefs().size() + "] Briefs");
+    logger.log(System.Logger.Level.DEBUG, "Briefing response for user [{0}] with [{1}] Briefs", user.userId(),
+        updated.briefs().size());
   }
 }

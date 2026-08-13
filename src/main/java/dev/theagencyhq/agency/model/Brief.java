@@ -7,27 +7,27 @@ package dev.theagencyhq.agency.model;
 import module java.base;
 import module org.lattejava.json;
 
+import dev.theagencyhq.agency.model.internal.*;
 
 /**
- * A Brief as the Handler receives it. Member declaration order is the wire key order and matches the Handler's
- * own record.
+ * A Brief as the Handler receives it. Member declaration order is the wire key order and matches the Handler's own
+ * record.
  * <p>
- * {@code checksum} and {@code version} are nullable, and that is what lets this one record be both the
- * published Brief and its own checksum input. {@code @JSON} omits null members, so a Brief carrying neither
- * serializes to just {@code organization} and {@code files} — the content, with the two members that must not
- * feed the checksum absent rather than merely blank. A published Brief always carries both, so the wire shape
- * the Handler sees is unchanged.
+ * {@code checksum} and {@code version} are nullable, and that is what lets this one record be both the published Brief
+ * and its own checksum input. {@code @JSON} omits null members, so a Brief carrying neither serializes to just
+ * {@code organization} and {@code files} — the content, with the two members that must not feed the checksum absent
+ * rather than merely blank. A published Brief always carries both, so the wire shape the Handler sees is unchanged.
  * <p>
- * A Brief canonicalizes itself: {@code files} is always sorted by path. The checksum is a hash of this record's
- * JSON, and the serializer writes a list in iteration order, so two Briefs with identical content but different
- * file order would otherwise hash differently and publish a new version for content that did not change. Owning
- * that here rather than in the builder means it holds for every Brief however it was constructed — rebuilt from a
- * working tree, parsed back off the wire, or copied to attach a version.
+ * A Brief canonicalizes itself: {@code files} is always sorted by path. The checksum is a hash of this record's JSON,
+ * and the serializer writes a list in iteration order, so two Briefs with identical content but different file order
+ * would otherwise hash differently and publish a new version for content that did not change. Owning that here rather
+ * than in the builder means it holds for every Brief however it was constructed — rebuilt from a working tree, parsed
+ * back off the wire, or copied to attach a version.
  * <p>
- * {@code sourceCommit} and {@code insertInstant} are the version's provenance, assigned by the insert and read
- * back off the {@code briefs} row rather than out of the stored document. They are declared last so the members
- * the Handler reads keep the exact prefix its own record declares, and they are null on a Brief that has not been
- * stored yet — which is why they never reach the checksum.
+ * {@code sourceCommit} and {@code insertInstant} are the version's provenance, assigned by the insert and read back off
+ * the {@code briefs} row rather than out of the stored document. They are declared last so the members the Handler
+ * reads keep the exact prefix its own record declares, and they are null on a Brief that has not been stored yet —
+ * which is why they never reach the checksum.
  */
 @JSON
 public record Brief(String checksum, Organization organization, Integer version, List<BriefFile> files,
@@ -48,10 +48,18 @@ public record Brief(String checksum, Organization organization, Integer version,
     files = List.copyOf(canonical);
   }
 
+  public static Brief fromJSON(String json) {
+    return BriefJSON.fromJSON(json);
+  }
+
   public BriefFile fileAt(String path) {
     return files.stream()
                 .filter(f -> f.path().equals(path))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("No Brief file at [" + path + "] in [" + files.stream().map(BriefFile::path).toList() + "]"));
+  }
+
+  public String toJSON() {
+    return BriefJSON.toJSON(this);
   }
 }

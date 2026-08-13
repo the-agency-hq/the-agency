@@ -14,6 +14,18 @@
           New Organization
         </a>`)
 
+  <%-- OAuth outcomes that have no Organization page left to land on. Rendered from a fixed set of known values
+       rather than echoed, so nothing an attacker can put in the URL reaches the page. --%>
+  @if("state_mismatch".equals(model.status()))
+    <div class="mb-6 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-4 py-3" role="alert">
+      <p class="text-sm text-red-800 dark:text-red-300">That GitHub response did not match a connection started from this browser, so it was ignored.</p>
+    </div>
+  @elseif("link_failed".equals(model.status()))
+    <div class="mb-6 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-4 py-3" role="alert">
+      <p class="text-sm text-red-800 dark:text-red-300">GitHub authorized the connection, but the Organization it was for no longer exists — it may have been deleted while you were away authorizing.</p>
+    </div>
+  @endif
+
   @if(model.rows().isEmpty())
     <div class="rounded-xl border border-dashed border-slate-300 dark:border-navy-800 px-6 py-16 text-center">
       <p class="text-sm text-slate-500 dark:text-slate-400">No Organizations yet.</p>
@@ -25,7 +37,7 @@
         <thead class="bg-slate-50 dark:bg-navy-900">
         <tr class="text-left">
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Name</th>
-          <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Path</th>
+          <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Repository</th>
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Status</th>
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Latest version</th>
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Last polled</th>
@@ -37,14 +49,18 @@
             <td class="px-4 py-3">
               <a class="font-medium text-accent-700 dark:text-accent-400 hover:underline" href="/app/organizations/${row.id().toString()}">${row.name()}</a>
             </td>
-            <td class="px-4 py-3"><code class="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">${row.path()}</code></td>
+            <td class="px-4 py-3">
+              @if(row.repository().isEmpty())
+                <a class="text-xs font-semibold text-accent-700 dark:text-accent-400 hover:underline" href="/app/organizations/${row.id().toString()}/connect">Connect a repository</a>
+              @else
+                <code class="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">${row.repository()}</code>
+                <div class="text-xs text-slate-400 dark:text-slate-500">${row.branch()}</div>
+              @endif
+            </td>
             <td class="px-4 py-3">
               @template.components.status-badge(status = row.status())
               @if(row.error() != null && !row.error().isBlank())
-                <div class="mt-2 max-w-md text-xs text-red-700 dark:text-red-400"><span class="font-semibold">Build error:</span> ${row.error()}</div>
-              @endif
-              @if(row.pullError() != null && !row.pullError().isBlank())
-                <div class="mt-2 max-w-md text-xs text-amber-700 dark:text-amber-400"><span class="font-semibold">Pull error:</span> ${row.pullError()}</div>
+                <div class="mt-2 max-w-md text-xs text-red-700 dark:text-red-400"><span class="font-semibold">Error:</span> ${row.error()}</div>
               @endif
             </td>
             <td class="px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300">${row.latestVersion() == null ? "—" : row.latestVersion().toString()}</td>

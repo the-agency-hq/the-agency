@@ -154,7 +154,7 @@ public class DatabaseServiceTest {
     var service = new DatabaseService(config);
     try {
       var now = Instant.now();
-      service.updateSourceStatus(UUID.randomUUID(), "abc123", now, SourceStatus.BUILD_FAILED, "gone", null, now);
+      service.updateSourceStatus(UUID.randomUUID(), "abc123", now, SourceStatus.BUILD_FAILED, "gone", now);
     } finally {
       service.close();
     }

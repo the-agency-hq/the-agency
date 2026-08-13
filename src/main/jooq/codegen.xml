@@ -26,7 +26,7 @@
             <from>t -&gt; t == null ? null : java.time.Instant.ofEpochMilli(t)</from>
             <to>u -&gt; u == null ? null : u.toEpochMilli()</to>
           </lambdaConverter>
-          <includeExpression>.*\.(insert_instant|update_instant|last_polled_instant)</includeExpression>
+          <includeExpression>.*\.(insert_instant|update_instant|last_polled_instant|github_access_expiration|github_refresh_expiration)</includeExpression>
         </forcedType>
 
         <!-- brief_sources.last_status -> SourceStatus -->

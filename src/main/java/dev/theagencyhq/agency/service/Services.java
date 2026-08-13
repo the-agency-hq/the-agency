@@ -8,16 +8,20 @@ import module java.base;
 import module org.lattejava.web;
 
 import dev.theagencyhq.agency.db.DatabaseService;
+import dev.theagencyhq.agency.github.GitHubClient;
+import dev.theagencyhq.agency.github.GitHubHTTPClient;
 import org.lattejava.web.Configuration;
 
 /**
- * A simple service registry. Every service is a singleton created in {@link #initialize(Configuration)}.
+ * A simple service registry. Every service is a singleton created in
+ * {@link #initialize(Configuration, GitHubClient)}.
  */
 public class Services {
   private static BriefBuilder briefBuilder;
   private static BriefingService briefingService;
   private static DatabaseService databaseService;
-  private static GitService gitService;
+  private static GitHubClient gitHubClient;
+  private static GitHubLinkService gitHubLinkService;
   private static OrganizationService organizationService;
   private static PollerService pollerService;
   private static final AtomicBoolean shutdownStarted = new AtomicBoolean();
@@ -34,20 +38,34 @@ public class Services {
     return databaseService;
   }
 
-  public static GitService gitService() {
-    return gitService;
+  public static GitHubClient gitHubClient() {
+    return gitHubClient;
   }
 
-  public static void initialize(Configuration config) {
+  public static GitHubLinkService gitHubLinkService() {
+    return gitHubLinkService;
+  }
+
+  /**
+   * @param config The configuration.
+   * @param github The GitHub client every service that talks to GitHub is built on, or {@code null} to build the
+   *               real one from {@code github.clientId} and {@code github.clientSecret}. Taken as a parameter for
+   *               one reason: it is the Agency's only outbound dependency on a service it does not own, and a test
+   *               suite that reached the real api.github.com would need a live GitHub App, a live installation, and
+   *               a network — and would still be measuring GitHub rather than the Agency.
+   */
+  public static void initialize(Configuration config, GitHubClient github) {
     shutdownStarted.set(false);
 
     // The database service owns the pool and must exist before anything that uses it.
     databaseService = new DatabaseService(config);
+    gitHubClient = github != null ? github
+        : new GitHubHTTPClient(config.get("github.clientId"), config.get("github.clientSecret"));
     briefBuilder = new BriefBuilder();
     briefingService = new BriefingService(databaseService);
-    gitService = new GitService();
-    organizationService = new OrganizationService(databaseService, gitService);
-    pollerService = new PollerService(databaseService, gitService, briefBuilder,
+    gitHubLinkService = new GitHubLinkService(config, databaseService, gitHubClient);
+    organizationService = new OrganizationService(databaseService, gitHubClient);
+    pollerService = new PollerService(databaseService, gitHubClient, gitHubLinkService, briefBuilder,
         config.getInteger("poller.intervalSeconds", 60));
 
     // The service is always constructed, so every caller can nudge it unconditionally; only the thread behind it is

@@ -73,9 +73,19 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
     public final TableField<BriefSourcesRecord, UUID> ORGANIZATION_ID = createField(DSL.name("organization_id"), SQLDataType.UUID.nullable(false), this, "");
 
     /**
-     * The column <code>public.brief_sources.path</code>.
+     * The column <code>public.brief_sources.owner</code>.
      */
-    public final TableField<BriefSourcesRecord, String> PATH = createField(DSL.name("path"), SQLDataType.CLOB.nullable(false), this, "");
+    public final TableField<BriefSourcesRecord, String> OWNER = createField(DSL.name("owner"), SQLDataType.CLOB.nullable(false), this, "");
+
+    /**
+     * The column <code>public.brief_sources.repository</code>.
+     */
+    public final TableField<BriefSourcesRecord, String> REPOSITORY = createField(DSL.name("repository"), SQLDataType.CLOB.nullable(false), this, "");
+
+    /**
+     * The column <code>public.brief_sources.branch</code>.
+     */
+    public final TableField<BriefSourcesRecord, String> BRANCH = createField(DSL.name("branch"), SQLDataType.CLOB.nullable(false), this, "");
 
     /**
      * The column <code>public.brief_sources.last_built_commit</code>.
@@ -96,11 +106,6 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
      * The column <code>public.brief_sources.last_error</code>.
      */
     public final TableField<BriefSourcesRecord, String> LAST_ERROR = createField(DSL.name("last_error"), SQLDataType.CLOB, this, "");
-
-    /**
-     * The column <code>public.brief_sources.last_pull_error</code>.
-     */
-    public final TableField<BriefSourcesRecord, String> LAST_PULL_ERROR = createField(DSL.name("last_pull_error"), SQLDataType.CLOB, this, "");
 
     /**
      * The column <code>public.brief_sources.insert_instant</code>.
@@ -186,7 +191,7 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
 
     @Override
     public List<UniqueKey<BriefSourcesRecord>> getUniqueKeys() {
-        return Arrays.asList(Keys.BRIEF_SOURCES_ORGANIZATION_ID_KEY, Keys.BRIEF_SOURCES_PATH_KEY);
+        return Arrays.asList(Keys.BRIEF_SOURCES_ORGANIZATION_ID_KEY);
     }
 
     @Override
@@ -210,7 +215,7 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
     @Override
     public List<Check<BriefSourcesRecord>> getChecks() {
         return Arrays.asList(
-            Internal.createCheck(this, DSL.name("brief_sources_last_status_check"), "((last_status = ANY (ARRAY['BUILD_FAILED'::text, 'NOT_A_REPOSITORY'::text, 'OK'::text, 'UNCHANGED'::text])))", true)
+            Internal.createCheck(this, DSL.name("brief_sources_last_status_check"), "((last_status = ANY (ARRAY['BUILD_FAILED'::text, 'FETCH_FAILED'::text, 'NOT_CONNECTED'::text, 'OK'::text, 'UNCHANGED'::text])))", true)
         );
     }
 

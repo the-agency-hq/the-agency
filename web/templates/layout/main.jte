@@ -18,9 +18,12 @@
   <!-- Before the stylesheet and without defer, so a dark-mode reload never flashes the light theme first. It is
        an external file because SecurityHeaders' CSP is `default-src 'self'` with no 'unsafe-inline'. -->
   <script src="/static/js/theme.js"></script>
-  <!-- Deferred, unlike theme.js: nothing it does is visible before first paint, and it only has to be in place by
-       the time someone can click. External for the same CSP reason -- an inline onclick= would be refused. -->
+  <!-- Deferred, unlike theme.js: nothing they do is visible before first paint, and they only have to be in place
+       by the time someone can click. External for the same CSP reason -- an inline onclick= would be refused.
+       Both are loaded on every page and each does nothing on a page without the elements it looks for, which is
+       cheaper than teaching the layout which page wants which script. -->
   <script src="/static/js/copy.js" defer></script>
+  <script src="/static/js/connect.js" defer></script>
   <link rel="stylesheet" href="/static/css/app.css"/>
 </head>
 <body class="bg-white text-slate-900 dark:bg-navy-950 dark:text-slate-100 transition-colors duration-200">

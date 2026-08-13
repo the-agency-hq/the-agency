@@ -55,7 +55,7 @@ public abstract class IntervalThread extends Thread {
 
   @Override
   public void run() {
-    logger.log(System.Logger.Level.DEBUG, "[" + getName() + "] started with an interval of [" + intervalSeconds() + "]s");
+    logger.log(System.Logger.Level.DEBUG, "[{0}] started with an interval of [{1}]s", getName(), intervalSeconds());
     while (running) {
       if (!awaitNudge() || !running) {
         break;
@@ -69,7 +69,7 @@ public abstract class IntervalThread extends Thread {
       }
     }
 
-    logger.log(System.Logger.Level.DEBUG, "[" + getName() + "] stopped");
+    logger.log(System.Logger.Level.DEBUG, "[{0}] stopped", getName());
   }
 
   /**

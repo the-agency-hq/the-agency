@@ -70,6 +70,31 @@ public class Organizations extends TableImpl<OrganizationsRecord> {
     public final TableField<OrganizationsRecord, String> NAME = createField(DSL.name("name"), SQLDataType.CLOB.nullable(false), this, "");
 
     /**
+     * The column <code>public.organizations.github_login</code>.
+     */
+    public final TableField<OrganizationsRecord, String> GITHUB_LOGIN = createField(DSL.name("github_login"), SQLDataType.CLOB, this, "");
+
+    /**
+     * The column <code>public.organizations.github_access_token</code>.
+     */
+    public final TableField<OrganizationsRecord, String> GITHUB_ACCESS_TOKEN = createField(DSL.name("github_access_token"), SQLDataType.CLOB, this, "");
+
+    /**
+     * The column <code>public.organizations.github_access_expiration</code>.
+     */
+    public final TableField<OrganizationsRecord, Instant> GITHUB_ACCESS_EXPIRATION = createField(DSL.name("github_access_expiration"), SQLDataType.BIGINT, this, "", Converter.ofNullable(Long.class, Instant.class, t -> t == null ? null : java.time.Instant.ofEpochMilli(t), u -> u == null ? null : u.toEpochMilli()));
+
+    /**
+     * The column <code>public.organizations.github_refresh_token</code>.
+     */
+    public final TableField<OrganizationsRecord, String> GITHUB_REFRESH_TOKEN = createField(DSL.name("github_refresh_token"), SQLDataType.CLOB, this, "");
+
+    /**
+     * The column <code>public.organizations.github_refresh_expiration</code>.
+     */
+    public final TableField<OrganizationsRecord, Instant> GITHUB_REFRESH_EXPIRATION = createField(DSL.name("github_refresh_expiration"), SQLDataType.BIGINT, this, "", Converter.ofNullable(Long.class, Instant.class, t -> t == null ? null : java.time.Instant.ofEpochMilli(t), u -> u == null ? null : u.toEpochMilli()));
+
+    /**
      * The column <code>public.organizations.insert_instant</code>.
      */
     public final TableField<OrganizationsRecord, Instant> INSERT_INSTANT = createField(DSL.name("insert_instant"), SQLDataType.BIGINT.nullable(false), this, "", Converter.ofNullable(Long.class, Instant.class, t -> t == null ? null : java.time.Instant.ofEpochMilli(t), u -> u == null ? null : u.toEpochMilli()));

@@ -10,6 +10,7 @@ import module org.lattejava.database;
 import com.zaxxer.hikari.*;
 import dev.theagencyhq.agency.error.*;
 import dev.theagencyhq.agency.model.*;
+import dev.theagencyhq.agency.model.github.*;
 import dev.theagencyhq.agency.model.internal.*;
 import org.jooq.*;
 import org.jooq.exception.*;
@@ -41,7 +42,7 @@ public class DatabaseService {
     try (Connection connection = dataSource.getConnection()) {
       var applied = new Migrator(connection, "db").migrate();
       if (!applied.isEmpty()) {
-        logger.log(System.Logger.Level.INFO, "Applied database migrations [" + applied + "]");
+        logger.log(System.Logger.Level.INFO, "Applied database migrations [{0}]", applied);
       }
     } catch (MigrationException | SQLException e) {
       // The pool never escapes this constructor on the failure path (it throws below), so close it here or it
@@ -61,9 +62,18 @@ public class DatabaseService {
   // transactional createOrganizationWithSource route through these, so adding a column is one edit rather than
   // three -- of which the third was previously easy to miss entirely, and would have failed only at runtime.
   private static void insertOrganization(DSLContext context, Organization organization) {
+    // The model is the whole row, so the insert writes the whole row -- a connection on a brand-new Organization
+    // does not happen through the admin UI, but an Organization that carries one must not lose it here.
+    var connection = organization.gitHubConnection();
+    var tokens = connection == null ? null : connection.tokens();
     context.insertInto(ORGANIZATIONS)
            .set(ORGANIZATIONS.ID, organization.id())
            .set(ORGANIZATIONS.NAME, organization.name())
+           .set(ORGANIZATIONS.GITHUB_LOGIN, connection == null ? null : connection.login())
+           .set(ORGANIZATIONS.GITHUB_ACCESS_TOKEN, tokens == null ? null : tokens.accessToken())
+           .set(ORGANIZATIONS.GITHUB_ACCESS_EXPIRATION, tokens == null ? null : tokens.accessExpiration())
+           .set(ORGANIZATIONS.GITHUB_REFRESH_TOKEN, tokens == null ? null : tokens.refreshToken())
+           .set(ORGANIZATIONS.GITHUB_REFRESH_EXPIRATION, tokens == null ? null : tokens.refreshTokenExpiration())
            .set(ORGANIZATIONS.INSERT_INSTANT, organization.insertInstant())
            .set(ORGANIZATIONS.UPDATE_INSTANT, organization.updateInstant())
            .execute();
@@ -73,12 +83,13 @@ public class DatabaseService {
     context.insertInto(BRIEF_SOURCES)
            .set(BRIEF_SOURCES.ID, source.id())
            .set(BRIEF_SOURCES.ORGANIZATION_ID, source.organizationId())
-           .set(BRIEF_SOURCES.PATH, source.path())
+           .set(BRIEF_SOURCES.OWNER, source.owner())
+           .set(BRIEF_SOURCES.REPOSITORY, source.repository())
+           .set(BRIEF_SOURCES.BRANCH, source.branch())
            .set(BRIEF_SOURCES.LAST_BUILT_COMMIT, source.lastBuiltCommit())
            .set(BRIEF_SOURCES.LAST_POLLED_INSTANT, source.lastPolledInstant())
            .set(BRIEF_SOURCES.LAST_STATUS, source.lastStatus())
            .set(BRIEF_SOURCES.LAST_ERROR, source.lastError())
-           .set(BRIEF_SOURCES.LAST_PULL_ERROR, source.lastPullError())
            .set(BRIEF_SOURCES.INSERT_INSTANT, source.insertInstant())
            .set(BRIEF_SOURCES.UPDATE_INSTANT, source.updateInstant())
            .execute();
@@ -93,10 +104,26 @@ public class DatabaseService {
         record.get(BRIEFS.SOURCE_COMMIT), record.get(BRIEFS.INSERT_INSTANT));
   }
 
+  private static GitHubConnection toConnection(org.jooq.Record record) {
+    // A row with no access token is an Organization that is not connected, whatever the other columns hold.
+    if (record.get(ORGANIZATIONS.GITHUB_ACCESS_TOKEN) == null) {
+      return null;
+    }
+
+    return new GitHubConnection(
+        record.get(ORGANIZATIONS.GITHUB_LOGIN),
+        new GitHubTokens(
+            record.get(ORGANIZATIONS.GITHUB_ACCESS_TOKEN),
+            record.get(ORGANIZATIONS.GITHUB_ACCESS_EXPIRATION),
+            record.get(ORGANIZATIONS.GITHUB_REFRESH_TOKEN),
+            record.get(ORGANIZATIONS.GITHUB_REFRESH_EXPIRATION)));
+  }
+
   private static Organization toOrganization(org.jooq.Record record) {
     return new Organization(
         record.get(ORGANIZATIONS.ID),
         record.get(ORGANIZATIONS.NAME),
+        toConnection(record),
         record.get(ORGANIZATIONS.INSERT_INSTANT),
         record.get(ORGANIZATIONS.UPDATE_INSTANT));
   }
@@ -105,65 +132,64 @@ public class DatabaseService {
     return new BriefSource(
         record.get(BRIEF_SOURCES.ID),
         record.get(BRIEF_SOURCES.ORGANIZATION_ID),
-        record.get(BRIEF_SOURCES.PATH),
+        record.get(BRIEF_SOURCES.OWNER),
+        record.get(BRIEF_SOURCES.REPOSITORY),
+        record.get(BRIEF_SOURCES.BRANCH),
         record.get(BRIEF_SOURCES.LAST_BUILT_COMMIT),
         record.get(BRIEF_SOURCES.LAST_POLLED_INSTANT),
         record.get(BRIEF_SOURCES.LAST_STATUS),
         record.get(BRIEF_SOURCES.LAST_ERROR),
-        record.get(BRIEF_SOURCES.LAST_PULL_ERROR),
         record.get(BRIEF_SOURCES.INSERT_INSTANT),
         record.get(BRIEF_SOURCES.UPDATE_INSTANT));
   }
 
-  // Translates a unique-constraint violation raised by createOrganizationWithSource's transaction into the same
-  // ValidationException shape OrganizationValidator's up-front check throws, keyed off Postgres's own reported
-  // constraint name (verified directly against this schema) rather than parsing the exception's free-text message,
-  // which is not a stable contract across Postgres versions. Any other DataAccessException is not ours to
-  // interpret, so it is returned unchanged for the caller to rethrow as-is.
-  private static RuntimeException translateUniqueViolation(DataAccessException e, Organization organization,
-                                                           BriefSource source) {
+  // Translates a unique-constraint violation raised by an insert into the same ValidationException shape the
+  // validators' up-front checks throw, keyed off Postgres's own reported constraint name (verified directly against
+  // this schema) rather than parsing the exception's free-text message, which is not a stable contract across
+  // Postgres versions. Any other DataAccessException is not ours to interpret, so it is returned unchanged for the
+  // caller to rethrow as-is.
+  //
+  // Both up-front checks are non-atomic with the insert that follows them -- a second caller can take the name or
+  // the repository in between -- so this is the only thing that makes a duplicate genuinely impossible rather than
+  // merely unlikely, and the racing caller sees the same error the losing form submission would have shown.
+  private static RuntimeException translateUniqueViolation(DataAccessException e, String name, BriefSource source) {
     var postgres = e.getCause(PSQLException.class);
     var constraint = postgres == null || postgres.getServerErrorMessage() == null ? null
         : postgres.getServerErrorMessage().getConstraint();
 
-    if ("brief_sources_path_key".equals(constraint)) {
+    if ("brief_sources_uk_repository".equals(constraint) && source != null) {
       return new ValidationException(
-          List.of("The path [" + source.path() + "] is already registered to another Organization."));
+          List.of("The repository [" + source.fullName() + "] is already registered to another Organization."));
     }
-    if ("organizations_uk_name".equals(constraint)) {
-      return new ValidationException(List.of("The name [" + organization.name() + "] is already registered."));
+    if ("organizations_uk_name".equals(constraint) && name != null) {
+      return new ValidationException(List.of("The name [" + name + "] is already registered."));
     }
 
     return e;
   }
 
-  public void close() {
-    dataSource.close();
+  /**
+   * Removes an Organization's GitHub credential, if it has one. Idempotent, and a no-op for an Organization that
+   * does not exist.
+   *
+   * @param organizationId The Organization.
+   * @param updateInstant  When the row was updated. A parameter rather than a clock read here, like every other
+   *                       write method on this class.
+   */
+  public void clearGitHubConnection(UUID organizationId, Instant updateInstant) {
+    dsl.update(ORGANIZATIONS)
+       .setNull(ORGANIZATIONS.GITHUB_LOGIN)
+       .setNull(ORGANIZATIONS.GITHUB_ACCESS_TOKEN)
+       .setNull(ORGANIZATIONS.GITHUB_ACCESS_EXPIRATION)
+       .setNull(ORGANIZATIONS.GITHUB_REFRESH_TOKEN)
+       .setNull(ORGANIZATIONS.GITHUB_REFRESH_EXPIRATION)
+       .set(ORGANIZATIONS.UPDATE_INSTANT, updateInstant)
+       .where(ORGANIZATIONS.ID.eq(organizationId))
+       .execute();
   }
 
-  /**
-   * Inserts a new Organization and its single {@link BriefSource} together in one transaction, so a failure on either
-   * insert leaves neither behind. {@code OrganizationValidator} already checks name and path uniqueness before this is
-   * ever called, but that check and this insert are not atomic with each other: a second caller can race between the
-   * two and still reach this method with a name or path that just became taken. A unique-constraint violation from that
-   * race is translated into a {@link ValidationException}, so a racing caller sees the exact same error shape as one
-   * that fails the up-front check instead of a raw jOOQ exception.
-   *
-   * @param organization The Organization to insert.
-   * @param source       Its Brief source.
-   * @throws ValidationException if the transaction violates the unique constraint on the Organization's name or the
-   *                             source's path.
-   */
-  public void createOrganizationWithSource(Organization organization, BriefSource source) {
-    try {
-      dsl.transaction(config -> {
-        var tx = DSL.using(config);
-        insertOrganization(tx, organization);
-        insertSource(tx, source);
-      });
-    } catch (DataAccessException e) {
-      throw translateUniqueViolation(e, organization, source);
-    }
+  public void close() {
+    dataSource.close();
   }
 
   public void deleteOrganization(UUID id) {
@@ -190,7 +216,9 @@ public class DatabaseService {
   }
 
   public Optional<Organization> findOrganization(UUID id) {
-    return dsl.selectFrom(ORGANIZATIONS).where(ORGANIZATIONS.ID.eq(id)).fetchOptional(DatabaseService::toOrganization);
+    return dsl.selectFrom(ORGANIZATIONS)
+              .where(ORGANIZATIONS.ID.eq(id))
+              .fetchOptional(DatabaseService::toOrganization);
   }
 
   /**
@@ -218,8 +246,22 @@ public class DatabaseService {
               .fetchOptional(DatabaseService::toSource);
   }
 
-  public Optional<BriefSource> findSourceByPath(String path) {
-    return dsl.selectFrom(BRIEF_SOURCES).where(BRIEF_SOURCES.PATH.eq(path)).fetchOptional(DatabaseService::toSource);
+  /**
+   * Case-insensitive on both halves, matching the {@code brief_sources_uk_repository} unique index, and lowercased
+   * by Postgres on both sides for the same reason {@link #findOrganizationByName} is: two different case-folding
+   * implementations either side of a comparison is how a check reports a repository free that the index then
+   * rejects.
+   *
+   * @param owner      The repository owner, in any case.
+   * @param repository The repository name, in any case.
+   * @return The source, if that repository is registered to an Organization.
+   */
+  public Optional<BriefSource> findSourceByRepository(String owner, String repository) {
+    return dsl.selectFrom(BRIEF_SOURCES)
+              .where(DSL.lower(BRIEF_SOURCES.OWNER).eq(DSL.lower(DSL.val(owner == null ? null : owner.trim()))))
+              .and(DSL.lower(BRIEF_SOURCES.REPOSITORY)
+                      .eq(DSL.lower(DSL.val(repository == null ? null : repository.trim()))))
+              .fetchOptional(DatabaseService::toSource);
   }
 
   /**
@@ -273,12 +315,41 @@ public class DatabaseService {
     return new Brief(brief.checksum(), brief.organization(), version, brief.files(), brief.sourceCommit(), brief.insertInstant());
   }
 
+  /**
+   * @param organization The Organization to insert.
+   * @throws ValidationException if another Organization already holds the name, case-insensitively.
+   */
   public void insertOrganization(Organization organization) {
-    insertOrganization(dsl, organization);
+    try {
+      insertOrganization(dsl, organization);
+    } catch (DataAccessException e) {
+      throw translateUniqueViolation(e, organization.name(), null);
+    }
   }
 
-  public void insertSource(BriefSource source) {
-    insertSource(dsl, source);
+  /**
+   * Replaces an Organization's Brief source with a new one, in one transaction so a failure leaves the old source in
+   * place rather than none at all. Reconnecting is the same operation as connecting for the first time — the delete
+   * simply removes nothing — which is what keeps a re-authorization from needing a second code path.
+   *
+   * <p>The source's poll history is deliberately not carried over. {@code lastBuiltCommit} in particular belongs to
+   * whatever repository was registered before, and preserving it across a change of repository would make the next
+   * cycle compare the new repository's head against the old one's and, if they happened to agree, skip the build
+   * that was the entire point of reconnecting.
+   *
+   * @param source The new source.
+   * @throws ValidationException if the repository is already registered to another Organization.
+   */
+  public void replaceSource(BriefSource source) {
+    try {
+      dsl.transaction(config -> {
+        var tx = DSL.using(config);
+        tx.deleteFrom(BRIEF_SOURCES).where(BRIEF_SOURCES.ORGANIZATION_ID.eq(source.organizationId())).execute();
+        insertSource(tx, source);
+      });
+    } catch (DataAccessException e) {
+      throw translateUniqueViolation(e, null, source);
+    }
   }
 
   /**
@@ -339,24 +410,47 @@ public class DatabaseService {
   }
 
   /**
+   * Writes an Organization's GitHub connection, replacing whatever was there.
+   *
+   * <p>{@code update_instant} moves with every write to the row, this one included — which means it moves on every
+   * eight-hour token refresh. That is safe for Brief versioning only because the Brief document embeds the
+   * Organization's identity and never its timestamps; see {@code BriefBuilder.build}.
+   *
+   * @param organizationId The Organization.
+   * @param connection     The connection to store.
+   * @param updateInstant  When the row was updated. A parameter rather than a clock read here, like every other
+   *                       write method on this class.
+   * @return True if the Organization exists and the connection was written.
+   */
+  public boolean updateGitHubConnection(UUID organizationId, GitHubConnection connection, Instant updateInstant) {
+    return dsl.update(ORGANIZATIONS)
+              .set(ORGANIZATIONS.GITHUB_LOGIN, connection.login())
+              .set(ORGANIZATIONS.GITHUB_ACCESS_TOKEN, connection.tokens().accessToken())
+              .set(ORGANIZATIONS.GITHUB_ACCESS_EXPIRATION, connection.tokens().accessExpiration())
+              .set(ORGANIZATIONS.GITHUB_REFRESH_TOKEN, connection.tokens().refreshToken())
+              .set(ORGANIZATIONS.GITHUB_REFRESH_EXPIRATION, connection.tokens().refreshTokenExpiration())
+              .set(ORGANIZATIONS.UPDATE_INSTANT, updateInstant)
+              .where(ORGANIZATIONS.ID.eq(organizationId))
+              .execute() == 1;
+  }
+
+  /**
    * @param organizationId    The Organization whose source is being updated.
    * @param lastBuiltCommit   The commit the Brief was last built from.
    * @param lastPolledInstant When the source was last polled.
    * @param status            The status the poll produced.
-   * @param lastError         The build error, or {@code null}.
-   * @param lastPullError     The {@code git pull} error, or {@code null}.
+   * @param lastError         Why the cycle failed, or {@code null}.
    * @param updateInstant     When the row was updated. Taken as a parameter rather than read from the clock here, like
    *                          every other write method on this class, so the caller can record one instant across a
    *                          whole cycle instead of a set of times that drift apart by however long the writes took.
    */
   public void updateSourceStatus(UUID organizationId, String lastBuiltCommit, Instant lastPolledInstant,
-                                 SourceStatus status, String lastError, String lastPullError, Instant updateInstant) {
+                                 SourceStatus status, String lastError, Instant updateInstant) {
     dsl.update(BRIEF_SOURCES)
        .set(BRIEF_SOURCES.LAST_BUILT_COMMIT, lastBuiltCommit)
        .set(BRIEF_SOURCES.LAST_POLLED_INSTANT, lastPolledInstant)
        .set(BRIEF_SOURCES.LAST_STATUS, status)
        .set(BRIEF_SOURCES.LAST_ERROR, lastError)
-       .set(BRIEF_SOURCES.LAST_PULL_ERROR, lastPullError)
        .set(BRIEF_SOURCES.UPDATE_INSTANT, updateInstant)
        .where(BRIEF_SOURCES.ORGANIZATION_ID.eq(organizationId))
        .execute();

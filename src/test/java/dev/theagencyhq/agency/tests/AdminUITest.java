@@ -8,13 +8,10 @@ import module java.base;
 import module org.lattejava.web;
 import module org.testng;
 
-// NOT redundant alongside `import module java.base`: org.testng is an automatic module, so it exports every one of
-// its packages, and one of them declares its own Files. Without this single-type import every use below is
-// "reference to Files is ambiguous". The same collision is why other test classes here import Configuration,
-// Connection and Duration by name.
-import java.nio.file.Files;
+import dev.theagencyhq.agency.Main;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
 /**
  * Drives the admin UI entirely through HTTP, posting forms rather than calling {@code OrganizationService} or
@@ -23,31 +20,15 @@ import static org.testng.Assert.assertEquals;
 @Test
 public class AdminUITest extends BaseTest {
   public StringBodyAsserter string = new StringBodyAsserter();
-  private Path root;
-
-  // BaseTest empties the database before every method, so the only thing left to clean up here is the temporary
-  // Git work tree on disk. alwaysRun = true: a failure partway through must still remove it.
-  @AfterMethod(alwaysRun = true)
-  public void afterMethod() throws IOException {
-    deleteDirectory(root);
-    root = null;
-  }
-
-  // Every page in this class is behind the gate, so the session is established once here rather than at the top of
-  // each method. One authorization-code flow per test, and BaseTest ends it afterwards.
-  @BeforeMethod
-  public void signIn() throws Exception {
-    ssrOIDC.login(TEST_EMAIL, TEST_PASSWORD);
-  }
 
   @Test
-  public void binaryFileRendersSizeAndDownloadsRawBytes() throws Exception {
+  public void binaryFileRendersSizeAndDownloadsRawBytes() {
     // 0xFF is never a valid UTF-8 leading byte, so BriefBuilder's strict decoder falls back to base64 -- this
     // exercises the binary branch of the file page (size + download link, no inline preview) and the download
-    // response itself, neither of which the text-file scenarios above touch.
+    // response itself, neither of which the text-file scenarios below touch.
     var binary = new byte[] {(byte) 0xFF, (byte) 0xFE, 0x00, 0x01, 0x02, (byte) 0x80};
-    root = createBinarySourceRepository(binary);
-    var organizationId = createOrganization("admin-ui-binary-" + UUID.randomUUID(), root.toString());
+    github.add("acme", "briefs").putBytes("rules/logo.bin", binary);
+    var organizationId = createConnectedOrganization("admin-ui-binary-" + UUID.randomUUID());
 
     rebuild(organizationId);
 
@@ -68,22 +49,103 @@ public class AdminUITest extends BaseTest {
         .assertResponse(r -> assertEquals(r.body(), binary));
   }
 
+  /**
+   * A connection that dies after registration — revoked on GitHub's side — brings the warning back to the
+   * Organization's page once a poll has discovered it, because reconnecting is the same operation wherever the
+   * authorization went.
+   */
   @Test
-  public void createsAnOrganizationAndShowsItsVersions() throws Exception {
-    root = createSourceRepository("first\n");
+  public void aRevokedConnectionBringsTheWarningBack() {
+    github.add("acme", "briefs").putFile("rules/a.md", "first\n");
+    var organizationId = createConnectedOrganization("admin-ui-revoked-" + UUID.randomUUID());
+    rebuild(organizationId);
+
+    github.revokeAll();
+    rebuild(organizationId);
+
+    test.get("/app/organizations/" + organizationId)
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("not connected to GitHub")
+                                    .contains("/app/oauth/github/start?organizationId=" + organizationId));
+  }
+
+  /**
+   * Before any GitHub authorization exists, the Organization's own page carries the warning and the button that
+   * starts the authorization — it is where the create form lands the operator — and the repository picker is
+   * unreachable: it would have nothing to populate itself from, so it sends the operator back to the page that
+   * offers the connection.
+   */
+  @Test
+  public void anUnconnectedOrganizationWarnsOnItsPageAndThePickerRedirectsThere() {
+    var organizationId = createOrganization("admin-ui-unconnected-" + UUID.randomUUID());
+
+    test.get("/app/organizations/" + organizationId)
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("not connected to GitHub")
+                                    .contains("/app/oauth/github/start?organizationId=" + organizationId)
+                                    .doesNotContain("Use this repository"));
+
+    test.get("/app/organizations/" + organizationId + "/connect")
+        .assertRedirect(303, "/app/organizations/" + organizationId);
+  }
+
+  /**
+   * Once connected, the picker is populated from GitHub and each option carries its repository's default branch,
+   * which is the contract {@code /static/js/connect.js} reads to pre-fill the branch field.
+   */
+  @Test
+  public void connectListsTheRepositoriesGitHubOffers() {
+    github.add("acme", "briefs").defaultBranch("trunk");
+    github.add("acme", "other");
+    var organizationId = createOrganization("admin-ui-picker-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+
+    test.get("/app/organizations/" + organizationId + "/connect")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("value=\"acme/briefs\" data-branch=\"trunk\"")
+                                    .contains("value=\"acme/other\" data-branch=\"main\"")
+                                    .contains("Use this repository"));
+  }
+
+  /**
+   * An operator who has authorized the App but installed it nowhere has an empty picker, which must not render as
+   * an empty select they can submit — the only useful control is the one that sends them to install it.
+   */
+  @Test
+  public void connectSendsAnOperatorWithNoInstallationsToInstallTheApp() {
+    var organizationId = createOrganization("admin-ui-noinstall-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+
+    test.get("/app/organizations/" + organizationId + "/connect")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("Install the GitHub app")
+                                    .contains("https://github.com/apps/")
+                                    .doesNotContain("Use this repository"));
+  }
+
+  @Test
+  public void createsAnOrganizationConnectsItAndShowsItsVersions() {
+    github.add("acme", "briefs").putFile("rules/a.md", "first\n");
     var name = "admin-ui-" + UUID.randomUUID();
 
     test.get("/app/organizations/new")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("action=\"/app/organizations/\"").contains("method=\"post\""));
 
-    var organizationId = createOrganization(name, root.toString());
+    var organizationId = createConnectedOrganization(name);
 
+    // Connecting nudges the poller, but the nudge is asynchronous and the suite's poller thread is switched off, so
+    // the cycle is driven explicitly here exactly as the "Rebuild now" button's would be.
     rebuild(organizationId);
 
     test.get("/app/organizations/" + organizationId)
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("/organizations/" + organizationId + "/versions/1"));
+        .assertBodyAs(string, b -> b.contains("/organizations/" + organizationId + "/versions/1")
+                                    .contains("acme/briefs")
+                                    .contains("https://github.com/acme/briefs")
+                                    // A healthy connection must not warn -- the warning is the disconnected
+                                    // state's, and showing it here would train operators to ignore it.
+                                    .doesNotContain("not connected to GitHub"));
 
     test.get("/app/organizations/" + organizationId + "/versions/1")
         .assertStatus(200)
@@ -96,27 +158,27 @@ public class AdminUITest extends BaseTest {
   }
 
   @Test
-  public void detailRendersTheOrganizationIdWithACopyButton() throws Exception {
+  public void detailRendersTheOrganizationIdWithACopyButton() {
     // The id is the one value on this page a developer has to transcribe by hand -- it goes into a Location's
     // agent-location.json -- so it renders whether or not the Organization has ever built, and it renders next to
     // a copy button carrying the id itself. Asserting data-copy rather than the button's styling ties the test to
     // the contract /static/js/copy.js reads, which is the part that would actually break.
-    root = createSourceRepository("first\n");
-    var organizationId = createOrganization("admin-ui-id-" + UUID.randomUUID(), root.toString());
+    var organizationId = createOrganization("admin-ui-id-" + UUID.randomUUID());
 
     test.get("/app/organizations/" + organizationId)
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("Organization id")
-                                    .contains("data-copy=\"" + organizationId + "\""));
+                                    .contains("data-copy=\"" + organizationId + "\"")
+                                    .contains("No source is registered"));
   }
 
   @Test
-  public void fileContentIsEscapedWhenRendered() throws Exception {
+  public void fileContentIsEscapedWhenRendered() {
     // The Brief source repository is authored elsewhere and its content is never sanitized before being stored, so
     // this proves the version and file pages escape it on the way out rather than trusting it -- the one place an
     // $unsafe{...} slip would turn into stored XSS.
-    root = createSourceRepository("<script>alert(1)</script>\n");
-    var organizationId = createOrganization("admin-ui-xss-" + UUID.randomUUID(), root.toString());
+    github.add("acme", "briefs").putFile("rules/a.md", "<script>alert(1)</script>\n");
+    var organizationId = createConnectedOrganization("admin-ui-xss-" + UUID.randomUUID());
 
     rebuild(organizationId);
 
@@ -126,37 +188,35 @@ public class AdminUITest extends BaseTest {
   }
 
   @Test
-  public void listingRendersTheLatestVersionAndSourceErrors() throws Exception {
+  public void listingRendersTheLatestVersionAndSourceErrors() {
     // Nothing else in the suite renders the listing page at all -- every other admin-UI test goes straight to a
     // detail, version, or file page -- so this is the only coverage of the query behind it and of the error cells.
-    root = createSourceRepository("first\n");
-    var organizationId = createOrganization("admin-ui-listing-" + UUID.randomUUID(), root.toString());
+    var repository = github.add("acme", "briefs").putFile("rules/a.md", "first\n");
+    var organizationId = createConnectedOrganization("admin-ui-listing-" + UUID.randomUUID());
 
     rebuild(organizationId);
 
     // The version cell is fed by latestBriefVersions(), a different SQL statement from the one the Briefing API
-    // uses. This fixture repository also has no remote, so `git pull` always fails and lastPullError is populated
-    // -- which the listing never used to show, despite the row carrying it.
+    // uses. Asserting the cell and the repository rather than their markup: every element on this page carries
+    // Tailwind classes, so matching a bare tag would break on any styling change rather than on a behaviour change.
     test.get("/app/organizations/")
         .assertStatus(200)
-        // The version cell and the pull error, not their markup: every element on this page carries Tailwind
-        // classes now, so matching a bare tag would break on any styling change rather than on a behaviour change.
-        .assertBodyAs(string, b -> b.contains(">1</td>").contains("Pull error:"));
+        .assertBodyAs(string, b -> b.contains(">1</td>").contains("acme/briefs"));
 
     // Break the source and re-poll, so lastError is populated too.
-    Files.delete(root.resolve("the-agency-hq-settings.json"));
-    run(root, "git", "add", "-A");
-    run(root, "git", "commit", "-q", "-m", "remove the settings marker");
+    repository.removeFile("the-agency-hq-settings.json");
     rebuild(organizationId);
 
     test.get("/app/organizations/")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("BUILD_FAILED").contains("Build error:"));
+        .assertBodyAs(string, b -> b.contains("BUILD_FAILED").contains("Error:"));
   }
 
   @Test
   public void malformedOrganizationIdIs404() {
     test.get("/app/organizations/not-a-uuid")
+        .assertStatus(404);
+    test.get("/app/organizations/not-a-uuid/connect")
         .assertStatus(404);
     test.post("/app/organizations/not-a-uuid/rebuild")
         .assertStatus(404);
@@ -167,9 +227,9 @@ public class AdminUITest extends BaseTest {
   }
 
   @Test
-  public void malformedVersionAndIndexAreNotFound() throws Exception {
-    root = createSourceRepository("first\n");
-    var organizationId = createOrganization("admin-ui-404-" + UUID.randomUUID(), root.toString());
+  public void malformedVersionAndIndexAreNotFound() {
+    github.add("acme", "briefs").putFile("rules/a.md", "first\n");
+    var organizationId = createConnectedOrganization("admin-ui-404-" + UUID.randomUUID());
 
     rebuild(organizationId);
 
@@ -188,20 +248,54 @@ public class AdminUITest extends BaseTest {
         .assertStatus(404);
   }
 
+  /**
+   * Both roads to {@link Main#missing} render the styled not-found page rather than the framework's empty-body
+   * 404, which a browser replaces with its own error page or a blank one: a path that matches no route at all
+   * (Web's missing handler), and a matched route whose Organization does not exist (the controllers).
+   */
   @Test
-  public void rejectsAnInvalidPath() throws Exception {
-    // Deliberately outside the project's own working tree (unlike build/test/..., which is a subdirectory of this
-    // repository's git work tree and so would itself read back as a Git repository via the nearest ancestor .git).
-    root = Files.createTempDirectory("admin-ui-not-a-repo-");
-    var name = "admin-ui-invalid-" + UUID.randomUUID();
+  public void unmatchedAndMissingPathsRenderTheNotFoundPage() {
+    // No route matches at the root, which also means no OIDC gate: the page renders for an anonymous visitor.
+    test.get("/nonexistent")
+        .assertStatus(404)
+        .assertBodyAs(string, b -> b.contains("Page not found"));
 
-    test.withFormField("name", name)
-        .withFormField("path", root.toString())
+    test.get("/app/organizations/" + UUID.randomUUID())
+        .assertStatus(404)
+        .assertBodyAs(string, b -> b.contains("Page not found"));
+  }
+
+  /**
+   * The reason the repository is verified at registration rather than at the first poll: rejected here, the
+   * operator reads why on the form that caused it. Accepted here, the same failure surfaces as a
+   * {@code BUILD_FAILED} on a detail page they have no reason to open, arbitrarily later.
+   */
+  @Test
+  public void rejectsARepositoryThatIsNotABriefSource() {
+    github.add("acme", "app").removeFile("the-agency-hq-settings.json");
+    var name = "admin-ui-invalid-" + UUID.randomUUID();
+    var organizationId = createOrganization(name);
+    linkGitHub(organizationId);
+
+    test.withFormField("repository", "acme/app")
+        .withFormField("branch", "main")
+        .post("/app/organizations/" + organizationId + "/connect")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("is not a Brief source repository"))
+        .reset(ResetItem.Request);
+
+    assertTrue(db.findSource(organizationId).isEmpty());
+  }
+
+  @Test
+  public void rejectsAnEmptyName() {
+    test.withFormField("name", "  ")
         .post("/app/organizations/")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("is not a Git repository"));
+        .assertBodyAs(string, b -> b.contains("A name is required."))
+        .reset(ResetItem.Request);
 
-    assertEquals(db.listOrganizations().stream().filter(o -> o.name().equals(name)).count(), 0L);
+    assertEquals(db.listOrganizations().size(), 0);
   }
 
   /**
@@ -213,5 +307,33 @@ public class AdminUITest extends BaseTest {
   public void rootRedirectsToTheListing() {
     test.get("/")
         .assertRedirect(303, "/app/organizations/");
+  }
+
+  // Every page in this class is behind the gate, so the session is established once here rather than at the top of
+  // each method. One authorization-code flow per test, and BaseTest ends it afterwards.
+  @BeforeMethod
+  public void signIn() throws Exception {
+    ssrOIDC.login(TEST_EMAIL, TEST_PASSWORD);
+  }
+
+  /**
+   * Walks the whole registration through HTTP: name the Organization, authorize GitHub, pick {@code acme/briefs}.
+   * The GitHub authorization is the one step that cannot be a request — it is an OAuth round trip through
+   * github.com — so it goes through the link service, exactly as the real callback does.
+   *
+   * @param name The Organization's display name.
+   * @return Its id.
+   */
+  private UUID createConnectedOrganization(String name) {
+    var organizationId = createOrganization(name);
+    linkGitHub(organizationId);
+
+    test.withFormField("repository", "acme/briefs")
+        .withFormField("branch", "main")
+        .post("/app/organizations/" + organizationId + "/connect")
+        .assertRedirect(303, "/app/organizations/" + organizationId)
+        .reset(ResetItem.Request);
+
+    return organizationId;
   }
 }

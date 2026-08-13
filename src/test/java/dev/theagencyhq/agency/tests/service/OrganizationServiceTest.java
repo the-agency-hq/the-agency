@@ -6,30 +6,14 @@ package dev.theagencyhq.agency.tests.service;
 
 import module java.base;
 import module org.testng;
-import java.nio.file.Files;
 
 import dev.theagencyhq.agency.error.*;
-import dev.theagencyhq.agency.model.*;
 import dev.theagencyhq.agency.tests.*;
 
 import static org.testng.Assert.*;
 
 @Test
 public class OrganizationServiceTest extends BaseTest {
-  private final List<Path> workTrees = new ArrayList<>();
-  private Path root;
-
-  // BaseTest empties the database before every method, so only the temporary Git work trees are this class's to
-  // remove. alwaysRun = true so a partial failure still cleans up whatever was created.
-  @AfterMethod(alwaysRun = true)
-  public void afterMethod() throws IOException {
-    for (var tree : workTrees) {
-      deleteDirectory(tree);
-    }
-    workTrees.clear();
-    root = null;
-  }
-
   /**
    * The name is display text, so the validator imposes no character set at all — it only has to be present, fit 255
    * characters, and be unique. Case is preserved rather than flattened, which is the point of calling it display text:
@@ -39,10 +23,23 @@ public class OrganizationServiceTest extends BaseTest {
   public void createAcceptsAnyCharactersInTheNameAndPreservesCase() {
     var name = "FusionAuth Iñtërnâtiônàl — R&D / \"Ops\" <2026> 🕵" + UUID.randomUUID();
 
-    var organization = organizationService.create(name, root.toString());
+    var organization = organizationService.create(name);
 
     assertEquals(organization.name(), name);
     assertEquals(db.findOrganization(organization.id()).orElseThrow().name(), name);
+  }
+
+  /**
+   * An Organization exists from the moment it is named, with no source at all. That is an ordinary state rather
+   * than a broken one — it is where every Organization sits between step one and step two of registration — and
+   * the poller has to have nothing to say about it.
+   */
+  @Test
+  public void createLeavesTheOrganizationWithNoSource() {
+    var organization = organizationService.create("org-unconnected-" + UUID.randomUUID());
+
+    assertTrue(db.findSource(organization.id()).isEmpty());
+    assertTrue(db.listSources().isEmpty());
   }
 
   /**
@@ -51,15 +48,12 @@ public class OrganizationServiceTest extends BaseTest {
    * SQL instead of lowercasing its argument in Java.
    */
   @Test
-  public void createRejectsANameDifferingOnlyByCase() throws Exception {
+  public void createRejectsANameDifferingOnlyByCase() {
     var name = "Acme-" + UUID.randomUUID();
-    organizationService.create(name, root.toString());
+    organizationService.create(name);
 
-    // A second work tree, so the only thing wrong with this registration is the name. Reusing the first one's path
-    // would trip the path-uniqueness check too, and the assertion below could not tell the two apart.
-    var second = workTree();
     var exception = expectThrows(ValidationException.class,
-        () -> organizationService.create(name.toUpperCase(Locale.ROOT), second.toString()));
+        () -> organizationService.create(name.toUpperCase(Locale.ROOT)));
     assertEquals(exception.errors().size(), 1, exception.errors().toString());
     assertTrue(exception.errors().getFirst().contains("is already registered"), exception.errors().toString());
   }
@@ -68,83 +62,140 @@ public class OrganizationServiceTest extends BaseTest {
   public void createRejectsANameOverTheLengthLimit() {
     var tooLong = "a".repeat(256);
 
-    var exception = expectThrows(ValidationException.class, () -> organizationService.create(tooLong, root.toString()));
+    var exception = expectThrows(ValidationException.class, () -> organizationService.create(tooLong));
     assertTrue(exception.errors().getFirst().contains("at most 255 characters"), exception.errors().toString());
 
     // The boundary is inclusive, so one character shorter registers cleanly.
-    var atLimit = organizationService.create("b".repeat(255), root.toString());
-    assertEquals(atLimit.name().length(), 255);
-  }
-
-  @Test
-  public void createRejectsAnUnparseableSettingsFile() throws Exception {
-    Files.writeString(root.resolve("the-agency-hq-settings.json"), "this is not JSON");
-
-    var exception = expectThrows(ValidationException.class,
-        () -> organizationService.create("org-parse-" + UUID.randomUUID(), root.toString()));
-    assertTrue(exception.errors().getFirst().contains("Unable to parse"), exception.errors().toString());
-    assertTrue(db.findSourceByPath(root.toString()).isEmpty());
-  }
-
-  @Test
-  public void createRejectsAnUnsupportedSettingsMajorVersion() throws Exception {
-    // Registration PARSES the settings marker rather than merely checking that it exists. Without that, this
-    // repository registers cleanly and then fails BUILD_FAILED on every poll cycle from then on -- and the only
-    // evidence of the operator's mistake sits on a detail page they have no reason to open yet, arbitrarily long
-    // after the form submission that caused it.
-    Files.writeString(root.resolve("the-agency-hq-settings.json"), "{\"version\":\"2.0.0\"}");
-
-    var exception = expectThrows(ValidationException.class,
-        () -> organizationService.create("org-major-" + UUID.randomUUID(), root.toString()));
-    assertTrue(exception.errors().getFirst().contains("unsupported major"), exception.errors().toString());
-    assertTrue(db.findSourceByPath(root.toString()).isEmpty());
-  }
-
-  @Test
-  public void createRollsBackTheOrganizationWhenTheSourceInsertRacesAnExistingPath() {
-    var winner = organizationService.create("org-a-" + UUID.randomUUID(), root.toString());
-
-    // Simulates a second create() racing this one on the exact same path: a racing caller's own
-    // OrganizationValidator pre-check would have seen the path as free (the winner had not committed yet), so it
-    // reaches the transactional insert exactly like the winner did. Calling DatabaseService directly here -- rather
-    // than trying to land two concurrent create() calls on the exact same instant, which would be a timing-dependent
-    // flake -- reproduces that outcome deterministically: the rollback guarantee under test lives entirely in
-    // createOrganizationWithSource, so exercising it directly proves the same thing without relying on scheduling.
-    var now = Instant.now();
-    var loser = new Organization(UUID.randomUUID(), "org-b-" + UUID.randomUUID(), now, now);
-    var loserSource = new BriefSource(UUID.randomUUID(), loser.id(), root.toString(), null, null, null, null, null,
-        now, now);
-
-    var exception = expectThrows(ValidationException.class,
-        () -> db.createOrganizationWithSource(loser, loserSource));
-    assertTrue(exception.errors().getFirst().contains(root.toString()), exception.errors().toString());
-
-    // The whole point: insertOrganization for `loser` must not have survived just because it ran first inside the
-    // transaction. An orphaned Organization row with no source is exactly what the rollback exists to prevent.
-    assertTrue(db.findOrganization(loser.id()).isEmpty());
-
-    // The winner (and its source) are untouched by the loser's failed, rolled-back attempt.
-    assertEquals(db.findOrganization(winner.id()).orElseThrow().id(), winner.id());
-    assertEquals(db.findSource(winner.id()).orElseThrow().path(), root.toString());
-  }
-
-  // Named apart from BaseTest's beforeMethod, which it must not override: an override cannot add a checked
-  // exception, and TestNG runs the superclass's reset first either way.
-  @BeforeMethod
-  public void createSourceRepository() throws Exception {
-    root = workTree();
+    assertEquals(organizationService.create("b".repeat(255)).name().length(), 255);
   }
 
   /**
-   * @return A fresh directory that passes every path check: absolute, existing, a Git work tree, and carrying a
-   *     supported settings marker. Extra ones are only needed by tests that must register twice without the second
-   *     registration failing for reusing the first one's path.
+   * The unique index is what genuinely prevents a duplicate; the validator's up-front check merely reports it
+   * politely. Racing the two is not reproducible on demand, so this asserts the guarantee at the layer that holds
+   * it: a second insert of the same repository, past the check, still fails — and fails as a
+   * {@link ValidationException} rather than a raw jOOQ exception, so a losing form submission reads the same as one
+   * that never raced at all.
    */
-  private Path workTree() throws Exception {
-    var tree = Files.createDirectories(Path.of("build/test/organization-" + UUID.randomUUID()).toAbsolutePath());
-    Files.writeString(tree.resolve("the-agency-hq-settings.json"), "{\"version\":\"1.0.0\"}");
-    initRepository(tree);
-    workTrees.add(tree);
-    return tree;
+  @Test
+  public void connectIsRejectedWhenAnotherOrganizationHoldsTheRepositoryCaseInsensitively() {
+    github.add("Acme", "Briefs");
+    var first = organizationService.create("org-a-" + UUID.randomUUID());
+    linkGitHub(first.id());
+    connect(first.id(), "Acme", "Briefs");
+
+    github.add("acme", "briefs");
+    var second = organizationService.create("org-b-" + UUID.randomUUID());
+    linkGitHub(second.id());
+    var exception = expectThrows(ValidationException.class, () -> connect(second.id(), "acme", "briefs"));
+    assertTrue(exception.errors().getFirst().contains("already registered"), exception.errors().toString());
+
+    assertTrue(db.findSource(second.id()).isEmpty());
+    assertEquals(db.findSource(first.id()).orElseThrow().repository(), "Briefs");
+  }
+
+  @Test
+  public void connectRejectsAMissingSettingsFile() {
+    github.add("acme", "not-a-brief-source").removeFile("the-agency-hq-settings.json");
+    var organization = organizationService.create("org-marker-" + UUID.randomUUID());
+    linkGitHub(organization.id());
+
+    var exception = expectThrows(ValidationException.class,
+        () -> connect(organization.id(), "acme", "not-a-brief-source"));
+    assertTrue(exception.errors().getFirst().contains("is not a Brief source repository"),
+        exception.errors().toString());
+    assertTrue(db.findSource(organization.id()).isEmpty());
+  }
+
+  @Test
+  public void connectRejectsAnUnknownBranch() {
+    github.add("acme", "briefs");
+    var organization = organizationService.create("org-branch-" + UUID.randomUUID());
+    linkGitHub(organization.id());
+
+    var exception = expectThrows(ValidationException.class,
+        () -> connect(organization.id(), "acme", "briefs", "does-not-exist"));
+    assertTrue(exception.errors().getFirst().contains("does-not-exist"), exception.errors().toString());
+    assertTrue(db.findSource(organization.id()).isEmpty());
+  }
+
+  @Test
+  public void connectRejectsAnUnparseableSettingsFile() {
+    github.add("acme", "briefs").putFile("the-agency-hq-settings.json", "this is not JSON");
+    var organization = organizationService.create("org-parse-" + UUID.randomUUID());
+    linkGitHub(organization.id());
+
+    var exception = expectThrows(ValidationException.class, () -> connect(organization.id(), "acme", "briefs"));
+    assertTrue(exception.errors().getFirst().contains("Unable to parse"), exception.errors().toString());
+    assertTrue(db.findSource(organization.id()).isEmpty());
+  }
+
+  /**
+   * Registration parses the settings marker rather than merely checking that it exists. Without that, this
+   * repository connects cleanly and then fails {@code BUILD_FAILED} on every poll cycle from then on — and the only
+   * evidence of the operator's mistake sits on a detail page they have no reason to open yet, arbitrarily long
+   * after the form submission that caused it.
+   */
+  @Test
+  public void connectRejectsAnUnsupportedSettingsMajorVersion() {
+    github.add("acme", "briefs").putFile("the-agency-hq-settings.json", "{\"version\":\"2.0.0\"}");
+    var organization = organizationService.create("org-major-" + UUID.randomUUID());
+    linkGitHub(organization.id());
+
+    var exception = expectThrows(ValidationException.class, () -> connect(organization.id(), "acme", "briefs"));
+    assertTrue(exception.errors().getFirst().contains("unsupported major"), exception.errors().toString());
+    assertTrue(db.findSource(organization.id()).isEmpty());
+  }
+
+  @Test
+  public void connectRejectsARepositoryThisAccountCannotSee() {
+    // Never registered with the fake at all, which is what a repository the GitHub App has not been installed on
+    // looks like from here: GitHub simply does not answer for it.
+    var organization = organizationService.create("org-invisible-" + UUID.randomUUID());
+    linkGitHub(organization.id());
+
+    var exception = expectThrows(ValidationException.class, () -> connect(organization.id(), "acme", "private"));
+    assertTrue(exception.errors().getFirst().contains("acme/private"), exception.errors().toString());
+    assertTrue(db.findSource(organization.id()).isEmpty());
+  }
+
+  /**
+   * Reconnecting replaces the source rather than adding a second one, and drops the poll history with it. Carrying
+   * {@code lastBuiltCommit} across a change of repository would let the next cycle compare the new repository's
+   * head against the old one's and, if they happened to agree, skip the build that was the entire point.
+   */
+  @Test
+  public void connectReplacesAnExistingSourceAndClearsItsHistory() {
+    github.add("acme", "briefs");
+    github.add("acme", "other-briefs");
+    var organization = organizationService.create("org-replace-" + UUID.randomUUID());
+    linkGitHub(organization.id());
+
+    connect(organization.id(), "acme", "briefs");
+    assertEquals(runCycle(organization.id()), dev.theagencyhq.agency.model.SourceStatus.OK);
+    assertNotNull(db.findSource(organization.id()).orElseThrow().lastBuiltCommit());
+
+    connect(organization.id(), "acme", "other-briefs");
+
+    var source = db.findSource(organization.id()).orElseThrow();
+    assertEquals(source.repository(), "other-briefs");
+    assertNull(source.lastBuiltCommit());
+    assertNull(source.lastStatus());
+    assertEquals(db.listSources().size(), 1);
+  }
+
+  @Test
+  public void connectStoresTheRepositoryAsGitHubSpellsIt() {
+    github.add("Acme-Corp", "Brief-Sources").defaultBranch("trunk");
+    var organization = organizationService.create("org-case-" + UUID.randomUUID());
+    linkGitHub(organization.id());
+
+    connect(organization.id(), "Acme-Corp", "Brief-Sources", "trunk");
+
+    var source = db.findSource(organization.id()).orElseThrow();
+    assertEquals(source.owner(), "Acme-Corp");
+    assertEquals(source.repository(), "Brief-Sources");
+    assertEquals(source.branch(), "trunk");
+    assertEquals(source.fullName(), "Acme-Corp/Brief-Sources");
+    assertEquals(source.url(), "https://github.com/Acme-Corp/Brief-Sources");
   }
 }

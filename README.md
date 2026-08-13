@@ -33,10 +33,34 @@ while it is constructing, so with FusionAuth down the Agency fails to start with
 document for issuer [...]` rather than starting up unable to validate a single token. Once it is running, nothing
 in the request path calls FusionAuth — access tokens are JWTs, verified locally against the cached JWKS.
 
+## Brief sources come from GitHub
+
+An Organization's Briefs are built from a GitHub repository, polled through GitHub's REST API. There is no
+local-filesystem source; registering one goes through the admin UI:
+
+1. **New Organization**, and give it a name. You land on the Organization's page.
+2. The page warns that the Organization is not connected to GitHub. **Connect to GitHub** authorizes The Agency's
+   GitHub App and returns you to the page. The same warning comes back if the authorization is ever revoked or
+   expires — reconnecting is the same button.
+3. **Connect a repository**, and pick the repository and branch. It must have a `the-agency-hq-settings.json` at
+   its root, which is checked before it is registered rather than on the first poll.
+
+The credential that comes back is stored in columns on the Organization's own `organizations` row, so deleting the
+Organization deletes it too. It is refreshed automatically; when it eventually lapses the source reports
+`NOT_CONNECTED`, keeps serving the Brief it last published, and waits for someone to reconnect it.
+
+Connecting needs a real GitHub App, so `github.clientId` and `github.clientSecret` ship as `replace-me` and have to
+be overridden in `~/.config/the-agency-hq/the-agency/config.properties` or the environment. The App needs its user
+authorization callback URL set to `http://localhost:8080/app/oauth/github/callback`, "Expire user authorization
+tokens" enabled, and read access to the contents and metadata of the repositories it is installed on. Everything
+else in the admin UI works without one.
+
 ## Running the tests
 
 The tests need PostgreSQL (`the_agency_test`) and the FusionAuth above. They authenticate as
-`admin@theagencyhq.dev` through two real authorization-code flows, once per suite — one per Application.
+`admin@theagencyhq.dev` through two real authorization-code flows, once per suite — one per Application. GitHub is
+the one thing they fake: `FakeGitHubClient` is an in-memory GitHub injected into `Main`, so no GitHub App and no
+network are needed. The GitHub credentials they store are written to the real local Postgres.
 
     latte test
 
@@ -44,3 +68,4 @@ The tests need PostgreSQL (`the_agency_test`) and the FusionAuth above. They aut
 
 - `docs/design/2026-07-30-brief-pipeline-design.md` — the Brief pipeline and the Briefing API (milestone 1)
 - `docs/design/2026-08-06-oauth-authentication-design.md` — OAuth authentication for the Briefing API
+- `docs/design/2026-08-08-github-brief-sources-design.md` — Brief sources on GitHub, replacing local work trees

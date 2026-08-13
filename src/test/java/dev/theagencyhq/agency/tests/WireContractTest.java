@@ -10,10 +10,7 @@ import module org.testng;
 import dev.theagencyhq.agency.model.Brief;
 import dev.theagencyhq.agency.model.BriefFile;
 import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.api.BriefingRequest;
-import dev.theagencyhq.agency.model.api.CurrentVersion;
-import dev.theagencyhq.agency.model.api.internal.BriefingRequestJSON;
-import dev.theagencyhq.agency.model.internal.BriefJSON;
+import dev.theagencyhq.agency.model.api.*;
 import dev.theagencyhq.agency.util.Checksums;
 import java.nio.file.Files;
 
@@ -23,7 +20,7 @@ import static org.testng.Assert.assertTrue;
 @Test
 public class WireContractTest {
   private static final Organization ORGANIZATION = new Organization(
-      UUID.fromString("00000000-0000-4000-8000-000000000042"), "fusionauth",
+      UUID.fromString("00000000-0000-4000-8000-000000000042"), "fusionauth", null,
       Instant.ofEpochSecond(1_700_000_000L), Instant.ofEpochSecond(1_700_000_000L));
 
   @Test
@@ -43,7 +40,7 @@ public class WireContractTest {
             "7b0464d7d419e8e21902270f71ec5e809ba2d1af68aea0df38f4e4913366a1b8", List.of("Web", "Library"))),
         null, null);
 
-    var json = BriefJSON.toJSON(brief);
+    var json = brief.toJSON();
 
     // Pins presence AND order of every top-level key in one assertion. A chain of indexOf(...) < indexOf(...)
     // comparisons cannot detect a missing leading key: indexOf returns -1 when absent, and -1 is less than every
@@ -79,12 +76,11 @@ public class WireContractTest {
         List.of(new BriefFile(".claude/rules/foo.md", "text", "r--------", "For Claude",
             "7b0464d7d419e8e21902270f71ec5e809ba2d1af68aea0df38f4e4913366a1b8", List.of("Web"))), null, null);
 
-    assertEquals(topLevelKeys(BriefJSON.toJSON(unpublished)), List.of("organization", "files"),
-        BriefJSON.toJSON(unpublished));
+    assertEquals(topLevelKeys(unpublished.toJSON()), List.of("organization", "files"), unpublished.toJSON());
 
     // A blank checksum is normalized to null by the compact constructor, so it cannot sneak onto the wire as ""
     var blank = new Brief("  ", ORGANIZATION, null, List.of(), null, null);
-    assertEquals(topLevelKeys(BriefJSON.toJSON(blank)), List.of("organization", "files"), BriefJSON.toJSON(blank));
+    assertEquals(topLevelKeys(blank.toJSON()), List.of("organization", "files"), blank.toJSON());
   }
 
   /**
@@ -104,7 +100,7 @@ public class WireContractTest {
         List.of(".claude/rules/a.md", ".claude/rules/b.md", ".codex/rules/c.md"));
 
     // The property that actually matters: order in, identical checksum out.
-    assertEquals(BriefJSON.toJSON(scrambled), BriefJSON.toJSON(new Brief(null, ORGANIZATION, null, List.of(a, b, c), null, null)));
+    assertEquals(scrambled.toJSON(), new Brief(null, ORGANIZATION, null, List.of(a, b, c), null, null).toJSON());
   }
 
   /**
@@ -119,17 +115,17 @@ public class WireContractTest {
         List.of(" Web ", "library", "WEB", "", "Library"));
     assertEquals(authored.missionTypes(), List.of("library", "web"));
 
-    var fresh = new Organization(UUID.fromString("00000000-0000-4000-8000-000000000042"), "FusionAuth",
+    var fresh = new Organization(UUID.fromString("00000000-0000-4000-8000-000000000042"), "FusionAuth", null,
         Instant.ofEpochSecond(1_700_000_000L, 123_456_789), Instant.ofEpochSecond(1_700_000_000L, 987_654_321));
-    var roundTripped = new Organization(fresh.id(), fresh.name(),
+    var roundTripped = new Organization(fresh.id(), fresh.name(), null,
         Instant.ofEpochMilli(fresh.insertInstant().toEpochMilli()),
         Instant.ofEpochMilli(fresh.updateInstant().toEpochMilli()));
 
     // The property: a Brief built against a freshly constructed Organization and one built against the same
     // Organization as the database hands it back serialize identically, so they cannot hash differently.
     assertEquals(fresh, roundTripped);
-    assertEquals(BriefJSON.toJSON(new Brief(null, fresh, null, List.of(authored), null, null)),
-        BriefJSON.toJSON(new Brief(null, roundTripped, null, List.of(authored), null, null)));
+    assertEquals(new Brief(null, fresh, null, List.of(authored), null, null).toJSON(),
+        new Brief(null, roundTripped, null, List.of(authored), null, null).toJSON());
   }
 
   @Test
@@ -141,7 +137,7 @@ public class WireContractTest {
 
   @Test
   public void parsesAHandlerRequest() {
-    var request = BriefingRequestJSON.fromJSON(
+    var request = BriefingRequest.fromJSON(
         "{\"currentVersions\":[{\"organizationId\":\"42\",\"version\":73,\"checksum\":\"abc\"}]}"
             .getBytes(StandardCharsets.UTF_8));
 

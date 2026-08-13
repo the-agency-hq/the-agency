@@ -31,7 +31,6 @@ public class Keys {
     // -------------------------------------------------------------------------
 
     public static final UniqueKey<BriefSourcesRecord> BRIEF_SOURCES_ORGANIZATION_ID_KEY = Internal.createUniqueKey(BriefSources.BRIEF_SOURCES, DSL.name("brief_sources_organization_id_key"), new TableField[] { BriefSources.BRIEF_SOURCES.ORGANIZATION_ID }, true);
-    public static final UniqueKey<BriefSourcesRecord> BRIEF_SOURCES_PATH_KEY = Internal.createUniqueKey(BriefSources.BRIEF_SOURCES, DSL.name("brief_sources_path_key"), new TableField[] { BriefSources.BRIEF_SOURCES.PATH }, true);
     public static final UniqueKey<BriefSourcesRecord> BRIEF_SOURCES_PKEY = Internal.createUniqueKey(BriefSources.BRIEF_SOURCES, DSL.name("brief_sources_pkey"), new TableField[] { BriefSources.BRIEF_SOURCES.ID }, true);
     public static final UniqueKey<BriefsRecord> BRIEFS_ORGANIZATION_ID_VERSION_KEY = Internal.createUniqueKey(Briefs.BRIEFS, DSL.name("briefs_organization_id_version_key"), new TableField[] { Briefs.BRIEFS.ORGANIZATION_ID, Briefs.BRIEFS.VERSION }, true);
     public static final UniqueKey<BriefsRecord> BRIEFS_PKEY = Internal.createUniqueKey(Briefs.BRIEFS, DSL.name("briefs_pkey"), new TableField[] { Briefs.BRIEFS.ID }, true);

@@ -6,59 +6,59 @@ package dev.theagencyhq.agency.tests.service;
 
 import module java.base;
 import module org.testng;
-import java.nio.file.Files;
 
 import dev.theagencyhq.agency.model.*;
+import dev.theagencyhq.agency.model.github.*;
 import dev.theagencyhq.agency.service.*;
-import dev.theagencyhq.agency.tests.*;
 import dev.theagencyhq.agency.util.*;
 
 import static org.testng.Assert.*;
 
+/**
+ * The builder in isolation: a repository is a map of paths to bytes and a map of paths to Git modes, which is
+ * exactly what it is handed in production. No server, no database, and no temporary directories — the builder
+ * touches no filesystem, so neither does this.
+ */
 @Test
-public class BriefBuilderTest extends BaseTest {
-  // A fixed id and fixed timestamps: the Organization is nested inside the Brief and so feeds the content
-  // checksum, and the determinism tests below would compare against a moving target if any of it were generated.
+public class BriefBuilderTest {
+  // A fixed id and name: the Organization's identity is nested inside the Brief and so feeds the content
+  // checksum, and the determinism tests below would compare against a moving target if it were generated. The
+  // builder strips everything else -- the connection and the instants -- before the Brief is checksummed.
   private static final Organization ORG = new Organization(UUID.fromString("00000000-0000-4000-8000-000000000042"),
-      "fusionauth", Instant.ofEpochSecond(1_700_000_000L), Instant.ofEpochSecond(1_700_000_000L));
-  private Path root;
-
-  @AfterMethod
-  public void afterMethod() throws Exception {
-    deleteDirectory(root);
-  }
+      "fusionauth", null, Instant.ofEpochSecond(1_700_000_000L), Instant.ofEpochSecond(1_700_000_000L));
+  private Map<String, byte[]> files;
+  private Map<String, String> modes;
 
   @BeforeMethod
-  public void beforeMethod() throws Exception {
-    root = Files.createDirectories(Path.of("build/test/brief-builder-" + UUID.randomUUID()));
-    write(root, "the-agency-hq-settings.json", "{\"version\":\"1.0.0\"}");
+  public void beforeMethod() {
+    files = new HashMap<>();
+    modes = new HashMap<>();
+    write("the-agency-hq-settings.json", "{\"version\":\"1.0.0\"}");
   }
 
   @Test
-  public void binaryContentBecomesBase64() throws Exception {
+  public void binaryContentBecomesBase64() {
     byte[] binary = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00};
-    var path = root.resolve("skills/logo.png");
-    Files.createDirectories(path.getParent());
-    Files.write(path, binary);
+    writeBytes("skills/logo.png", binary);
 
-    var file = new BriefBuilder().build(ORG, root).fileAt(".claude/skills/logo.png");
+    var file = build().fileAt(".claude/skills/logo.png");
     assertEquals(file.encoding(), "base64");
     assertEquals(Base64.getDecoder().decode(file.content()), binary);
     assertEquals(file.checksum(), Checksums.sha256Hex(binary));
   }
 
   @Test
-  public void checksumIsDeterministicAndContentSensitive() throws Exception {
-    write(root, "agents/z.md", "Z");
-    write(root, "rules/a.md", "A");
-    write(root, "rules/b.md", "B");
+  public void checksumIsDeterministicAndContentSensitive() {
+    write("agents/z.md", "Z");
+    write("rules/a.md", "A");
+    write("rules/b.md", "B");
 
-    var brief = new BriefBuilder().build(ORG, root);
+    var brief = build();
 
-    // Source directories are walked agents-then-rules, so an unsorted build would emit both agent types' copies of
-    // z.md before either copy of rules/a.md. Asserting the fully output-path-sorted order here — not merely that
-    // two builds agree with each other — is what makes this test fail if the final sort were ever removed: listing
-    // an unchanged directory twice in the same process is stable, so two back-to-back builds would still match.
+    // The walk visits every path in sorted source order, so an unsorted build would emit both agent types' copies
+    // of agents/z.md before either copy of rules/a.md. Asserting the fully output-path-sorted order here -- not
+    // merely that two builds agree with each other -- is what makes this fail if the final sort were removed:
+    // iterating an unchanged map twice in the same process is stable, so two back-to-back builds would still match.
     assertEquals(
         brief.files().stream().map(BriefFile::path).toList(),
         List.of(
@@ -72,23 +72,19 @@ public class BriefBuilderTest extends BaseTest {
     );
 
     var first = BriefBuilder.checksum(brief);
-    var second = BriefBuilder.checksum(new BriefBuilder().build(ORG, root));
-    assertEquals(first, second);
+    assertEquals(BriefBuilder.checksum(build()), first);
 
-    write(root, "rules/b.md", "B changed");
-    assertNotEquals(BriefBuilder.checksum(new BriefBuilder().build(ORG, root)), first);
+    write("rules/b.md", "B changed");
+    assertNotEquals(BriefBuilder.checksum(build()), first);
   }
 
   @Test
-  public void executableSourceFilesBecomeOwnerReadExecute() throws Exception {
-    var script = write(root, "skills/skill1/scripts/run.sh", "#!/bin/sh\necho hi\n");
-    write(root, "skills/skill1/SKILL.md", "skill");
+  public void executableSourceFilesBecomeOwnerReadExecute() {
+    write("skills/skill1/scripts/run.sh", "#!/bin/sh\necho hi\n");
+    modes.put("skills/skill1/scripts/run.sh", TreeEntry.MODE_EXECUTABLE);
+    write("skills/skill1/SKILL.md", "skill");
 
-    var permissions = new HashSet<>(Files.getPosixFilePermissions(script));
-    permissions.add(PosixFilePermission.OWNER_EXECUTE);
-    Files.setPosixFilePermissions(script, permissions);
-
-    var brief = new BriefBuilder().build(ORG, root);
+    var brief = build();
     assertEquals(brief.fileAt(".claude/skills/skill1/scripts/run.sh").mode(), "r-x------");
     assertEquals(brief.fileAt(".codex/skills/skill1/scripts/run.sh").mode(), "r-x------");
     assertEquals(brief.fileAt(".claude/skills/skill1/SKILL.md").mode(), "r--------");
@@ -107,17 +103,15 @@ public class BriefBuilderTest extends BaseTest {
   }
 
   @Test
-  public void mapsSharedDirectoriesToBothAgentTypes() throws Exception {
-    write(root, "skills/skill1/SKILL.md", "skill");
-    write(root, "rules/rule1.md", "rule");
-    write(root, "agents/agent1.md", "agent");
-    write(root, "claude/settings.json", "{}");
-    write(root, "codex/config.toml", "x = 1");
-    write(root, "README.md", "ignored");
+  public void mapsSharedDirectoriesToBothAgentTypes() {
+    write("skills/skill1/SKILL.md", "skill");
+    write("rules/rule1.md", "rule");
+    write("agents/agent1.md", "agent");
+    write("claude/settings.json", "{}");
+    write("codex/config.toml", "x = 1");
+    write("README.md", "ignored");
 
-    var paths = new BriefBuilder().build(ORG, root).files().stream().map(BriefFile::path).toList();
-
-    assertEquals(paths, List.of(
+    assertEquals(build().files().stream().map(BriefFile::path).toList(), List.of(
         ".claude/agents/agent1.md",
         ".claude/rules/rule1.md",
         ".claude/settings.json",
@@ -129,110 +123,113 @@ public class BriefBuilderTest extends BaseTest {
   }
 
   @Test
-  public void missionTypeFilesAreNeverEmitted() throws Exception {
-    write(root, "skills/.mission-types", "Web\n");
-    write(root, "skills/SKILL.md.mission-types", "Library\n");
-    write(root, "skills/SKILL.md", "skill");
+  public void missionTypeFilesAreNeverEmitted() {
+    write("skills/.mission-types", "Web\n");
+    write("skills/SKILL.md.mission-types", "Library\n");
+    write("skills/SKILL.md", "skill");
 
-    var paths = new BriefBuilder().build(ORG, root).files().stream().map(BriefFile::path).toList();
-    assertEquals(paths, List.of(".claude/skills/SKILL.md", ".codex/skills/SKILL.md"));
+    assertEquals(build().files().stream().map(BriefFile::path).toList(),
+        List.of(".claude/skills/SKILL.md", ".codex/skills/SKILL.md"));
   }
 
   @Test
-  public void missionTypesAreAttachedToEveryDerivedFile() throws Exception {
+  public void missionTypesAreAttachedToEveryDerivedFile() {
     // Authored mixed-case and in a different order than they come out: BriefFile canonicalizes them, so the
     // resolver's author-order output (asserted as-is by MissionTypeResolverTest) is not what reaches the wire.
-    write(root, "skills/.mission-types", "Web\nLibrary\n");
-    write(root, "skills/skill1/SKILL.md", "skill");
+    write("skills/.mission-types", "Web\nLibrary\n");
+    write("skills/skill1/SKILL.md", "skill");
 
-    var brief = new BriefBuilder().build(ORG, root);
+    var brief = build();
     assertEquals(brief.fileAt(".claude/skills/skill1/SKILL.md").missionTypes(), List.of("library", "web"));
     assertEquals(brief.fileAt(".codex/skills/skill1/SKILL.md").missionTypes(), List.of("library", "web"));
   }
 
   @Test
-  public void rejectsAGitSegmentFromTheEscapeHatch() throws Exception {
-    write(root, "claude/.git/config", "[core]\n\tpager = touch /tmp/pwned\n");
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
+  public void rejectsAGitSegmentFromTheEscapeHatch() {
+    write("claude/.git/config", "[core]\n\tpager = touch /tmp/pwned\n");
+    assertThrows(BriefBuildException.class, this::build);
   }
 
   @Test
-  public void rejectsAGitignoreFromTheEscapeHatch() throws Exception {
+  public void rejectsAGitignoreFromTheEscapeHatch() {
     // An ordinary, plausible source file: nothing about `claude/.gitignore` looks hostile, which is exactly why it
     // has to fail here. The Handler's planner rejects the whole Location's plan once it sees it, but only after the
     // Agency has published the version and every Handler has committed it to its store and reported itself current.
-    write(root, "claude/.gitignore", "*.log\n");
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
+    write("claude/.gitignore", "*.log\n");
+    assertThrows(BriefBuildException.class, this::build);
   }
 
   @Test(dataProvider = "malformedSettings")
-  public void rejectsAMalformedSettingsVersion(String settingsJSON) throws Exception {
-    write(root, "the-agency-hq-settings.json", settingsJSON);
-    write(root, "rules/a.md", "x");
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
+  public void rejectsAMalformedSettingsVersion(String settingsJSON) {
+    write("the-agency-hq-settings.json", settingsJSON);
+    write("rules/a.md", "x");
+    assertThrows(BriefBuildException.class, this::build);
   }
 
   @Test
-  public void rejectsASymbolicLink() throws Exception {
-    Files.createDirectories(root.resolve("rules"));
-    Files.createSymbolicLink(root.resolve("rules/link.md"), Path.of("/etc/hosts"));
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
+  public void rejectsASymbolicLink() {
+    // GitHub's archive carries a link as an ordinary small file whose content is the path it points at, so nothing
+    // about the bytes gives it away -- only the mode from the tree does. Dropping it silently would ship a Brief
+    // that is quietly missing a file; publishing its content would ship the target path as if it were the file.
+    write("rules/link.md", "../../../etc/hosts");
+    modes.put("rules/link.md", TreeEntry.MODE_SYMLINK);
+    assertThrows(BriefBuildException.class, this::build);
   }
 
   @Test
-  public void rejectsATopLevelSymbolicLinkDirectory() throws Exception {
-    // The target genuinely contains a file that would have mapped, so this proves content loss is prevented, not
-    // merely that some exception fires: silently dropping this file would ship an incomplete Brief with no error.
-    var target = root.resolve("real-rules");
-    Files.createDirectories(target);
-    Files.writeString(target.resolve("a.md"), "content");
-    Files.createSymbolicLink(root.resolve("rules"), target);
-
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
+  public void rejectsAnUnsupportedSettingsMajorVersion() {
+    write("the-agency-hq-settings.json", "{\"version\":\"2.0.0\"}");
+    write("rules/a.md", "x");
+    assertThrows(BriefBuildException.class, this::build);
   }
 
   @Test
-  public void rejectsAnUnsupportedSettingsMajorVersion() throws Exception {
-    write(root, "the-agency-hq-settings.json", "{\"version\":\"2.0.0\"}");
-    write(root, "rules/a.md", "x");
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
-  }
-
-  @Test
-  public void rejectsDuplicateOutputPaths() throws Exception {
+  public void rejectsDuplicateOutputPaths() {
     // The shared "rules" directory and the "claude" escape hatch can independently target .claude/rules/a.md.
-    // OutputPaths validates one path string at a time and cannot see this collision — only BriefBuilder, which
+    // OutputPaths validates one path string at a time and cannot see this collision -- only BriefBuilder, which
     // sees every source file, can catch two different inputs landing on the same Brief file path.
-    write(root, "rules/a.md", "shared");
-    write(root, "claude/rules/a.md", "escape hatch");
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
+    write("rules/a.md", "shared");
+    write("claude/rules/a.md", "escape hatch");
+    assertThrows(BriefBuildException.class, this::build);
   }
 
   @Test
-  public void requiresTheSettingsMarker() throws Exception {
-    Files.delete(root.resolve("the-agency-hq-settings.json"));
-    write(root, "rules/a.md", "x");
-    assertThrows(BriefBuildException.class, () -> new BriefBuilder().build(ORG, root));
+  public void requiresTheSettingsMarker() {
+    files.remove("the-agency-hq-settings.json");
+    write("rules/a.md", "x");
+    assertThrows(BriefBuildException.class, this::build);
   }
 
   @Test
-  public void skipsAGenuinelyAbsentTopLevelDirectory() throws Exception {
-    write(root, "rules/a.md", "x");
-    // "agents", "skills", "claude", and "codex" are never created here, and their absence must not fail the build.
-    var paths = new BriefBuilder().build(ORG, root).files().stream().map(BriefFile::path).toList();
-    assertEquals(paths, List.of(".claude/rules/a.md", ".codex/rules/a.md"));
+  public void skipsAGenuinelyAbsentTopLevelDirectory() {
+    write("rules/a.md", "x");
+    // "agents", "skills", "claude", and "codex" hold nothing here, and their absence must not fail the build.
+    assertEquals(build().files().stream().map(BriefFile::path).toList(),
+        List.of(".claude/rules/a.md", ".codex/rules/a.md"));
   }
 
   @Test
-  public void textContentAndChecksum() throws Exception {
-    write(root, "rules/a.md", "For Claude");
+  public void textContentAndChecksum() {
+    write("rules/a.md", "For Claude");
 
-    var brief = new BriefBuilder().build(ORG, root);
-    var file = brief.fileAt(".claude/rules/a.md");
+    var file = build().fileAt(".claude/rules/a.md");
     assertEquals(file.encoding(), "text");
     assertEquals(file.content(), "For Claude");
     assertEquals(file.mode(), "r--------");
     assertEquals(file.checksum(), Checksums.sha256Hex("For Claude".getBytes(StandardCharsets.UTF_8)));
     assertTrue(file.missionTypes().isEmpty());
+  }
+
+  private Brief build() {
+    return new BriefBuilder().build(ORG, new RepositoryContents("commit", files, modes));
+  }
+
+  private void write(String path, String content) {
+    writeBytes(path, content.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private void writeBytes(String path, byte[] content) {
+    files.put(path, content);
+    modes.putIfAbsent(path, "100644");
   }
 }

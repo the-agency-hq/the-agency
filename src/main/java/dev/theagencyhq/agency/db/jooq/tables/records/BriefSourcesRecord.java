@@ -51,115 +51,129 @@ public class BriefSourcesRecord extends UpdatableRecordImpl<BriefSourcesRecord> 
     }
 
     /**
-     * Setter for <code>public.brief_sources.path</code>.
+     * Setter for <code>public.brief_sources.owner</code>.
      */
-    public void setPath(String value) {
+    public void setOwner(String value) {
         set(2, value);
     }
 
     /**
-     * Getter for <code>public.brief_sources.path</code>.
+     * Getter for <code>public.brief_sources.owner</code>.
      */
-    public String getPath() {
+    public String getOwner() {
         return (String) get(2);
+    }
+
+    /**
+     * Setter for <code>public.brief_sources.repository</code>.
+     */
+    public void setRepository(String value) {
+        set(3, value);
+    }
+
+    /**
+     * Getter for <code>public.brief_sources.repository</code>.
+     */
+    public String getRepository() {
+        return (String) get(3);
+    }
+
+    /**
+     * Setter for <code>public.brief_sources.branch</code>.
+     */
+    public void setBranch(String value) {
+        set(4, value);
+    }
+
+    /**
+     * Getter for <code>public.brief_sources.branch</code>.
+     */
+    public String getBranch() {
+        return (String) get(4);
     }
 
     /**
      * Setter for <code>public.brief_sources.last_built_commit</code>.
      */
     public void setLastBuiltCommit(String value) {
-        set(3, value);
+        set(5, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_built_commit</code>.
      */
     public String getLastBuiltCommit() {
-        return (String) get(3);
+        return (String) get(5);
     }
 
     /**
      * Setter for <code>public.brief_sources.last_polled_instant</code>.
      */
     public void setLastPolledInstant(Instant value) {
-        set(4, value);
+        set(6, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_polled_instant</code>.
      */
     public Instant getLastPolledInstant() {
-        return (Instant) get(4);
+        return (Instant) get(6);
     }
 
     /**
      * Setter for <code>public.brief_sources.last_status</code>.
      */
     public void setLastStatus(SourceStatus value) {
-        set(5, value);
+        set(7, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_status</code>.
      */
     public SourceStatus getLastStatus() {
-        return (SourceStatus) get(5);
+        return (SourceStatus) get(7);
     }
 
     /**
      * Setter for <code>public.brief_sources.last_error</code>.
      */
     public void setLastError(String value) {
-        set(6, value);
+        set(8, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_error</code>.
      */
     public String getLastError() {
-        return (String) get(6);
-    }
-
-    /**
-     * Setter for <code>public.brief_sources.last_pull_error</code>.
-     */
-    public void setLastPullError(String value) {
-        set(7, value);
-    }
-
-    /**
-     * Getter for <code>public.brief_sources.last_pull_error</code>.
-     */
-    public String getLastPullError() {
-        return (String) get(7);
+        return (String) get(8);
     }
 
     /**
      * Setter for <code>public.brief_sources.insert_instant</code>.
      */
     public void setInsertInstant(Instant value) {
-        set(8, value);
+        set(9, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.insert_instant</code>.
      */
     public Instant getInsertInstant() {
-        return (Instant) get(8);
+        return (Instant) get(9);
     }
 
     /**
      * Setter for <code>public.brief_sources.update_instant</code>.
      */
     public void setUpdateInstant(Instant value) {
-        set(9, value);
+        set(10, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.update_instant</code>.
      */
     public Instant getUpdateInstant() {
-        return (Instant) get(9);
+        return (Instant) get(10);
     }
 
     // -------------------------------------------------------------------------
@@ -185,17 +199,18 @@ public class BriefSourcesRecord extends UpdatableRecordImpl<BriefSourcesRecord> 
     /**
      * Create a detached, initialised BriefSourcesRecord
      */
-    public BriefSourcesRecord(UUID id, UUID organizationId, String path, String lastBuiltCommit, Instant lastPolledInstant, SourceStatus lastStatus, String lastError, String lastPullError, Instant insertInstant, Instant updateInstant) {
+    public BriefSourcesRecord(UUID id, UUID organizationId, String owner, String repository, String branch, String lastBuiltCommit, Instant lastPolledInstant, SourceStatus lastStatus, String lastError, Instant insertInstant, Instant updateInstant) {
         super(BriefSources.BRIEF_SOURCES);
 
         setId(id);
         setOrganizationId(organizationId);
-        setPath(path);
+        setOwner(owner);
+        setRepository(repository);
+        setBranch(branch);
         setLastBuiltCommit(lastBuiltCommit);
         setLastPolledInstant(lastPolledInstant);
         setLastStatus(lastStatus);
         setLastError(lastError);
-        setLastPullError(lastPullError);
         setInsertInstant(insertInstant);
         setUpdateInstant(updateInstant);
         resetTouchedOnNotNull();

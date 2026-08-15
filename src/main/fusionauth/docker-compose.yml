@@ -57,6 +57,21 @@ services:
       - ${FUSIONAUTH_LOCAL_KICKSTART_DIRECTORY}:/usr/local/fusionauth/kickstart
       - ${FUSIONAUTH_LOCAL_PLUGIN_DIRECTORY}:/usr/local/fusionauth/plugins
 
+  # Mailcatcher receives everything FusionAuth sends -- the kickstart points the tenant's SMTP configuration at
+  # mailcatcher:1025 -- so invitation and set-password emails land somewhere readable instead of failing. Read
+  # them at http://localhost:1080. Not behind a profile: the invite flow sends email on every invitation, so a
+  # default `docker compose up -d` has to include it.
+  mailcatcher:
+    image: sj26/mailcatcher
+    ports:
+      - "1025:1025"
+      - "1080:1080"
+    healthcheck:
+      interval: 10s
+      retries: 80
+      test: wget -q -O /dev/null http://mailcatcher:1080/
+    restart: unless-stopped
+
   # Open Search isn't technically required, but the `fusionauth` service currently depends on it, so we start it here.
   # You can change the search engine backend to `database` in the `.env` file if you would prefer to use that.
   # Then you can remove the search dependency above and disable this service.

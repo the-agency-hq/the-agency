@@ -10,7 +10,12 @@
     "defaultTenantId": "d7d09513-a3f5-401c-9685-34ab6c552453",
     "handlerApplicationId": "fa83bc7c-f1c5-48af-8ecb-6c09cf766d73",
     "handlerClientSecret": "super-secret-secret-that-should-be-regenerated-for-production",
-    "accessTokenPopulateLambdaId": "#{UUID()}"
+    "accessTokenPopulateLambdaId": "#{UUID()}",
+    "inviteEmailTemplateId": "2a157fd1-0918-4eca-aa87-8332b9a4bebb",
+    "setPasswordEmailTemplateId": "fc6283a9-ed8e-41f1-88f8-083373bea708",
+    "ordinaryEmail": "user@theagencyhq.dev",
+    "ordinaryPassword": "password",
+    "ordinaryUserId": "#{UUID()}"
   },
   "apiKeys": [
     {
@@ -31,11 +36,47 @@
       }
     },
     {
+      "method": "POST",
+      "url": "/api/email/template/#{inviteEmailTemplateId}",
+      "body": {
+        "emailTemplate": {
+          "name": "[The Agency] Organization Invitation",
+          "fromEmail": "noreply@theagencyhq.dev",
+          "defaultFromName": "The Agency",
+          "defaultSubject": "You've been invited to ${organizationName!'an Organization'} on The Agency",
+          "defaultHtmlTemplate": "@{emails/organization-invitation.html.ftl}",
+          "defaultTextTemplate": "@{emails/organization-invitation.txt.ftl}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/email/template/#{setPasswordEmailTemplateId}",
+      "body": {
+        "emailTemplate": {
+          "name": "[The Agency] Set Password (Invitation)",
+          "fromEmail": "noreply@theagencyhq.dev",
+          "defaultFromName": "The Agency",
+          "defaultSubject": "Set your password for The Agency",
+          "defaultHtmlTemplate": "@{emails/set-password.html.ftl}",
+          "defaultTextTemplate": "@{emails/set-password.txt.ftl}"
+        }
+      }
+    },
+    {
       "method": "PATCH",
       "url": "/api/tenant/#{defaultTenantId}",
       "body": {
         "tenant": {
-          "issuer": "http://localhost:9016"
+          "issuer": "http://localhost:9016",
+          "emailConfiguration": {
+            "host": "mailcatcher",
+            "port": 1025,
+            "defaultFromEmail": "noreply@theagencyhq.dev",
+            "defaultFromName": "The Agency",
+            "implicitEmailVerificationAllowed": true,
+            "setPasswordEmailTemplateId": "#{setPasswordEmailTemplateId}"
+          }
         }
       }
     },
@@ -156,6 +197,33 @@
     {
       "method": "POST",
       "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "registration": {
+          "applicationId": "#{handlerApplicationId}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{ordinaryUserId}",
+      "body": {
+        "registration": {
+          "applicationId": "#{agencyApplicationId}",
+          "roles": [
+            "user"
+          ]
+        },
+        "skipRegistrationVerification": true,
+        "user": {
+          "email": "#{ordinaryEmail}",
+          "username": "OrdinaryUser",
+          "password": "#{ordinaryPassword}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{ordinaryUserId}",
       "body": {
         "registration": {
           "applicationId": "#{handlerApplicationId}"

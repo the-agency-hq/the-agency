@@ -15,9 +15,8 @@ import dev.theagencyhq.agency.model.User;
  * claim carries what.
  *
  * <p>Static, and not registered on {@link Services}, because it holds nothing: every value it needs is in the token
- * the caller presented. The same is true in {@code latte-java/app}, which this mirrors. When the admin UI login
- * arrives it takes the same translator, and when memberships arrive they are looked up by the {@code userId} this
- * produces.
+ * the caller presented. The same is true in {@code latte-java/app}, which this mirrors. Memberships are looked up
+ * by the {@code userId} this produces.
  */
 public class UserService {
   /**
@@ -34,5 +33,16 @@ public class UserService {
     }
 
     return new User(UUID.fromString(subject), jwt.getString("email"), jwt.getString("preferred_username"));
+  }
+
+  /**
+   * Translates a FusionAuth domain user into a {@link User}. Used to enrich members and invitees from FusionAuth
+   * lookups, where the values come from FusionAuth's store rather than from a token's claims.
+   *
+   * @param fusionAuthUser The FusionAuth user.
+   * @return The user.
+   */
+  public static User toUser(org.lattejava.fusionauth.domain.User fusionAuthUser) {
+    return new User(fusionAuthUser.id(), fusionAuthUser.email(), fusionAuthUser.username());
   }
 }

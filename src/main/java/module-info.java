@@ -10,6 +10,7 @@ module dev.theagencyhq.agency {
   requires java.sql;
   requires org.jooq;
   requires org.lattejava.database;
+  requires org.lattejava.fusionauth;
   requires org.lattejava.http;
   requires org.lattejava.jwt;
   requires org.lattejava.version;
@@ -28,6 +29,7 @@ module dev.theagencyhq.agency {
   exports dev.theagencyhq.agency.model.api;
   exports dev.theagencyhq.agency.model.github;
   exports dev.theagencyhq.agency.model.view;
+  exports dev.theagencyhq.agency.security;
   exports dev.theagencyhq.agency.service;
   exports dev.theagencyhq.agency.service.validation;
   exports dev.theagencyhq.agency.util;

@@ -12,15 +12,15 @@ import static org.testng.Assert.assertTrue;
 
 /**
  * The browser half of authentication: the gate on {@code /app}, the session endpoints behind it, and the boundary
- * between the two OAuth clients. {@link AdminUITest} covers what the pages do once someone is signed in; this covers
+ * between the two OAuth clients. {@link AdminUIIntegrationTest} covers what the pages do once someone is signed in; this covers
  * getting signed in, and being turned away.
  *
  * <p>Every test here either calls {@code ssrOIDC.login(...)} — which drives a real authorization-code flow and
  * leaves the session in the shared cookie jar — or deliberately does not. {@code BaseTest} logs out after each
  * method, so "does not" means anonymous.
  */
-@Test
-public class AdminUIAuthenticationTest extends BaseTest {
+@Test(groups = "integration")
+public class AdminUIAuthenticationIntegrationTest extends BaseTest {
   public StringBodyAsserter string = new StringBodyAsserter();
 
   /**

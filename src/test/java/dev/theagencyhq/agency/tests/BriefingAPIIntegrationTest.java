@@ -12,7 +12,7 @@ import dev.theagencyhq.agency.model.*;
 
 /**
  * {@code POST /api/v1/briefing} end to end, including the whole §10.2 decision matrix — the scenarios that used to
- * drive {@code BriefingService.decide} directly with hand-built maps. The service reads the database itself now, so a
+ * drive {@code BriefingService.runBriefing} directly with hand-built maps. The service reads the database itself now, so a
  * test of it needs real rows either way; driving the same scenario over HTTP costs nothing extra and asserts the
  * response a Handler actually receives.
  *
@@ -25,8 +25,8 @@ import dev.theagencyhq.agency.model.*;
  * that expect the same response share a file, because "the same result" is part of the claim. Parsing is also the
  * well-formedness check, which is why there is no separate "is this valid JSON" test.
  */
-@Test
-public class BriefingAPITest extends BaseTest {
+@Test(groups = "integration")
+public class BriefingAPIIntegrationTest extends BaseTest {
   public JSONBodyAsserter json = new JSONBodyAsserter();
   public StringBodyAsserter string = new StringBodyAsserter();
   private Organization organization;
@@ -73,6 +73,30 @@ public class BriefingAPITest extends BaseTest {
         .post("/api/v1/briefing")
         .assertStatus(200)
         .assertBodyAs(json, b -> b.equalToFile(expected("delivered.json"), "organizationId", organization.id(), "organizationName", organization.name()));
+  }
+
+  /**
+   * The membership boundary, from the Handler's side: an Organization the caller has no ACTIVE membership in is
+   * simply not theirs. It neither appears in {@code organizationIds} nor forces a {@code 200}, however many Briefs
+   * it holds — and a PENDING invitation is no different, because nobody has accepted it yet.
+   */
+  @Test
+  public void anOrganizationTheCallerDoesNotBelongToIsNotEntitled() throws Exception {
+    var foreign = new Organization(UUID.randomUUID(), "briefing-foreign-" + UUID.randomUUID(), null, TEST_INSTANT,
+        TEST_INSTANT);
+    db.insertOrganization(foreign);
+    insertBrief(foreign, "sum-foreign", briefFile("agents.md", "foreign\n"));
+
+    var invited = new Organization(UUID.randomUUID(), "briefing-invited-" + UUID.randomUUID(), null, TEST_INSTANT,
+        TEST_INSTANT);
+    db.insertOrganization(invited);
+    insertMember(invited, testUser, Role.CONTRIBUTOR, MembershipState.PENDING);
+    insertBrief(invited, "sum-invited", briefFile("agents.md", "invited\n"));
+
+    // The caller's one Organization is asserted correctly, so with the other two rightly outside the entitled set
+    // there is nothing to say.
+    briefing(orgRequest(organization.id(), 1, "sum-1"))
+        .assertStatus(304);
   }
 
   /**

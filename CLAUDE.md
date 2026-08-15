@@ -45,6 +45,15 @@ session against The Agency Application. The audience (`aud`) check is the bounda
 the admin UI and vice versa. Middleware is installed on the `/api` and `/app` prefixes, so new routes are
 authenticated by construction. The server binds loopback only (no TLS listener).
 
+**Memberships are the authorization.** The `members` table (Organization × FusionAuth user id, role
+OWNER/CONTRIBUTOR, state ACTIVE/PENDING) gates everything: `OrganizationSecurity` on the `/app/organizations`
+prefix requires a membership row for any `{organizationId}` route (denials silently 303 to the listing), per-route
+`HasRole(OWNER)` gates the management pages, and both APIs serve only the caller's ACTIVE memberships. Creating an
+Organization seats the creator as ACTIVE OWNER. Invitations go through FusionAuth (`MembershipService`): known
+emails get the invitation email template, unknown ones get a FusionAuth registration whose set-password email is
+the invitation — templates live in `src/main/fusionauth/kickstart/emails/`, and Mailcatcher (in the compose stack,
+http://localhost:1080) receives them locally.
+
 **Brief pipeline.** An Organization connects a GitHub repository through the admin UI (GitHub App OAuth; the
 credential is stored in columns on the `organizations` row). `PollerService` (a background thread, interval
 `poller.intervalSeconds`, disabled via `poller.enabled=false`) polls each source through `GitHubClient`,

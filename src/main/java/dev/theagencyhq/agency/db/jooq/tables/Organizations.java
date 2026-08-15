@@ -8,6 +8,7 @@ import dev.theagencyhq.agency.db.jooq.Keys;
 import dev.theagencyhq.agency.db.jooq.Public;
 import dev.theagencyhq.agency.db.jooq.tables.BriefSources.BriefSourcesPath;
 import dev.theagencyhq.agency.db.jooq.tables.Briefs.BriefsPath;
+import dev.theagencyhq.agency.db.jooq.tables.Members.MembersPath;
 import dev.theagencyhq.agency.db.jooq.tables.records.OrganizationsRecord;
 
 import java.time.Instant;
@@ -200,6 +201,19 @@ public class Organizations extends TableImpl<OrganizationsRecord> {
             _briefs = new BriefsPath(this, null, Keys.BRIEFS__BRIEFS_ORGANIZATION_ID_FKEY.getInverseKey());
 
         return _briefs;
+    }
+
+    private transient MembersPath _members;
+
+    /**
+     * Get the implicit to-many join path to the <code>public.members</code>
+     * table
+     */
+    public MembersPath members() {
+        if (_members == null)
+            _members = new MembersPath(this, null, Keys.MEMBERS__MEMBERS_ORGANIZATION_ID_FKEY.getInverseKey());
+
+        return _members;
     }
 
     @Override

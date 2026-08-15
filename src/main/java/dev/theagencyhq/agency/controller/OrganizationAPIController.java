@@ -17,10 +17,9 @@ import dev.theagencyhq.agency.model.api.internal.*;
  *
  * <p>Authentication is not this class's job. {@code Main} installs Latte Web's API-mode OIDC middleware on the
  * {@code /api} prefix, so by the time a request reaches this handler its FusionAuth access token has been verified
- * and bound to the request, and {@link OIDC#user()} always resolves. Access is still every Organization
- * (2026-07-30 design §10.2, decision 3): the Agency stores no memberships yet, so the caller's entitled set is the
- * whole table, computed the same way {@code BriefingService} computes it. When entitlements arrive, the membership
- * lookup takes the {@link User} resolved here and this list narrows with it.
+ * and bound to the request, and {@link OIDC#user()} always resolves. Access is the caller's ACTIVE memberships —
+ * the entitlement the 2026-07-30 design (§10.4) promised — computed the same way {@code BriefingService} computes
+ * it. A PENDING invitation entitles a Handler to nothing, because nobody has accepted it yet.
  *
  * <p>The envelope carries the Organization records themselves, serialized through the generated codec.
  * {@code gitHubConnection} never serializes ({@code @JSONField(ignore = true)} on the record), so the credential
@@ -37,11 +36,11 @@ public class OrganizationAPIController {
   }
 
   public void list(HTTPRequest req, HTTPResponse res) throws IOException {
-    // Resolved first, as every controller resolves it first: this is the caller the request is on behalf of. It
-    // only reaches the response log until entitlements arrive, and then it is what the membership lookup takes.
+    // Resolved first, as every controller resolves it first: this is the caller the request is on behalf of, and
+    // the memberships the list is narrowed by are theirs.
     var user = oidc.user();
 
-    var organizations = database.listOrganizations();
+    var organizations = database.listOrganizationsForUser(user.userId(), MembershipState.ACTIVE);
     var bytes = OrganizationsResponseJSON.toJSONBytes(new OrganizationsResponse(organizations));
     res.setStatus(200);
     res.setContentType("application/json");

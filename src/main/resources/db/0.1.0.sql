@@ -26,6 +26,25 @@ CREATE TABLE organizations (
 -- Organization names are unique case-insensitively and first-come-first-serve, per idea.md.
 CREATE UNIQUE INDEX organizations_uk_name ON organizations (LOWER(name));
 
+-- Members: who belongs to an Organization, mirroring latte-java/app's members table with the Organization's UUID as
+-- the key instead of a group name. A row exists from the moment someone is invited: PENDING until the invitee
+-- accepts, ACTIVE afterwards. The user_id is the FusionAuth user UUID -- the Agency stores no users of its own, so
+-- everything display-worthy (email, username) is fetched from FusionAuth when a page needs it.
+CREATE TABLE members (
+  organization_id  UUID   NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+  user_id          UUID   NOT NULL,
+  role             TEXT   NOT NULL CHECK (role IN ('CONTRIBUTOR', 'OWNER')),
+  state            TEXT   NOT NULL CHECK (state IN ('ACTIVE', 'PENDING')),
+  invited_by       UUID,
+  invited_at       BIGINT,
+  joined_at        BIGINT,
+  PRIMARY KEY (organization_id, user_id)
+);
+
+-- The "which Organizations does this user belong to" query, which the admin UI listing and both APIs run on every
+-- request.
+CREATE INDEX members_idx_user_id ON members (user_id);
+
 -- Exactly one source per Organization (design decision 7): the GitHub repository its Briefs are built from.
 CREATE TABLE brief_sources (
   id                   UUID PRIMARY KEY,

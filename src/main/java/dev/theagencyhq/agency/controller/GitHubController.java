@@ -10,6 +10,9 @@ import module org.lattejava.web;
 
 import dev.theagencyhq.agency.Main;
 import dev.theagencyhq.agency.db.DatabaseService;
+import dev.theagencyhq.agency.model.MembershipState;
+import dev.theagencyhq.agency.model.Role;
+import dev.theagencyhq.agency.model.User;
 import dev.theagencyhq.agency.service.GitHubLinkService;
 import dev.theagencyhq.agency.service.Services;
 
@@ -18,8 +21,12 @@ import dev.theagencyhq.agency.service.Services;
  * App for an Organization, and take the authorization code back when they return.
  *
  * <p>Both routes sit inside the gated {@code /app} prefix, so only a signed-in operator can start a connection or
- * land a callback. The session survives the round trip because the browser profile's cookies are
- * {@code SameSite=Lax} and so ride along on a top-level navigation arriving from github.com.
+ * land a callback. On top of that, both require the caller to be an ACTIVE OWNER of the Organization — the
+ * Organization travels as a query parameter here rather than a path attribute, so {@code OrganizationSecurity}
+ * cannot see it and the check is made inline. Without it, the OWNER gate on the connect pages would be decoration:
+ * anyone who knew an Organization's id could swap its GitHub credential for their own. The session survives the
+ * round trip because the browser profile's cookies are {@code SameSite=Lax} and so ride along on a top-level
+ * navigation arriving from github.com.
  *
  * <p>The state parameter is a random nonce and nothing else. The Organization the credential will be stored
  * against travels in the encrypted cookie alongside that nonce, never in the URL: a state value that carried the
@@ -34,11 +41,13 @@ public class GitHubController {
   private final Cookies cookies;
   private final DatabaseService database;
   private final GitHubLinkService links;
+  private final OIDC<User> oidc;
 
-  public GitHubController(Cookies cookies) {
+  public GitHubController(Cookies cookies, OIDC<User> oidc) {
     this.cookies = cookies;
     this.database = Services.databaseService();
     this.links = Services.gitHubLinkService();
+    this.oidc = oidc;
   }
 
   public void callback(HTTPRequest req, HTTPResponse res) {
@@ -85,6 +94,15 @@ public class GitHubController {
       return;
     }
 
+    // Re-checked here, not just in start: the state cookie proves the callback answers a start from this browser,
+    // but the membership could have been revoked while the operator was away authorizing. Only for an Organization
+    // that still exists, though — a deleted one has no members to check, and it must keep reaching links.link so
+    // the operator gets the honest LINK_FAILED outcome rather than a wordless bounce.
+    if (database.findOrganization(organizationId).isPresent() && !ownedByCaller(organizationId)) {
+      res.sendRedirect("/app/organizations/", 303);
+      return;
+    }
+
     var code = req.getParameter("code");
     if (code == null) {
       // GitHub returns here with `error` instead of `code` when the operator declines the authorization. Not a
@@ -110,6 +128,12 @@ public class GitHubController {
     var id = raw == null ? null : uuid(raw);
     if (id == null || database.findOrganization(id).isEmpty()) {
       Main.missing(req, res);
+      return;
+    }
+
+    // The same denial OrganizationSecurity gives: back to the listing, saying nothing about why.
+    if (!ownedByCaller(id)) {
+      res.sendRedirect("/app/organizations/", 303);
       return;
     }
 
@@ -141,5 +165,11 @@ public class GitHubController {
 
   private String organizationPath(UUID organizationId, GitHubLinkService.LinkResult result) {
     return "/app/organizations/" + organizationId + "?status=" + result.name().toLowerCase(Locale.ROOT);
+  }
+
+  private boolean ownedByCaller(UUID organizationId) {
+    return database.findMember(organizationId, oidc.user().userId())
+                   .filter(m -> m.state() == MembershipState.ACTIVE && m.role() == Role.OWNER)
+                   .isPresent();
   }
 }

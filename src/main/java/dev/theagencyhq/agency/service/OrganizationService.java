@@ -9,7 +9,11 @@ import module java.base;
 import dev.theagencyhq.agency.db.DatabaseService;
 import dev.theagencyhq.agency.github.GitHubClient;
 import dev.theagencyhq.agency.model.BriefSource;
+import dev.theagencyhq.agency.model.Member;
+import dev.theagencyhq.agency.model.MembershipState;
 import dev.theagencyhq.agency.model.Organization;
+import dev.theagencyhq.agency.model.Role;
+import dev.theagencyhq.agency.model.User;
 import dev.theagencyhq.agency.service.validation.OrganizationValidator;
 import dev.theagencyhq.agency.service.validation.SourceValidator;
 
@@ -52,12 +56,24 @@ public class OrganizationService {
     return source;
   }
 
-  public Organization create(String name) {
+  /**
+   * Names a new Organization and makes its creator the first member: an ACTIVE OWNER with no inviter, exactly as
+   * {@code latte-java/app} seats a group's creator — because an Organization without an ACTIVE OWNER is one nobody
+   * can administer.
+   *
+   * @param name    The Organization's display name.
+   * @param creator The signed-in user creating it.
+   * @return The created Organization.
+   * @throws dev.theagencyhq.agency.error.ValidationException if the name is missing, too long, or taken.
+   */
+  public Organization create(String name, User creator) {
     OrganizationValidator.validate(name, database);
 
     var now = Instant.now();
     var organization = new Organization(UUID.randomUUID(), name, null, now, now);
     database.insertOrganization(organization);
+    database.insertMember(
+        new Member(organization.id(), creator.userId(), Role.OWNER, MembershipState.ACTIVE, null, null, now));
     return organization;
   }
 

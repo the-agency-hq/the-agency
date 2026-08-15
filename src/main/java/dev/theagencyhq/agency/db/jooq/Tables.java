@@ -6,6 +6,7 @@ package dev.theagencyhq.agency.db.jooq;
 
 import dev.theagencyhq.agency.db.jooq.tables.BriefSources;
 import dev.theagencyhq.agency.db.jooq.tables.Briefs;
+import dev.theagencyhq.agency.db.jooq.tables.Members;
 import dev.theagencyhq.agency.db.jooq.tables.Organizations;
 
 
@@ -24,6 +25,11 @@ public class Tables {
      * The table <code>public.briefs</code>.
      */
     public static final Briefs BRIEFS = Briefs.BRIEFS;
+
+    /**
+     * The table <code>public.members</code>.
+     */
+    public static final Members MEMBERS = Members.MEMBERS;
 
     /**
      * The table <code>public.organizations</code>.

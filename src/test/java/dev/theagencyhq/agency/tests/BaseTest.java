@@ -41,6 +41,12 @@ import static org.testng.Assert.*;
  */
 public abstract class BaseTest {
   /**
+   * A second FusionAuth user, provisioned by {@code src/main/fusionauth/kickstart}, for everything membership: it
+   * is the user that gets invited, removed, and turned away, while {@link #TEST_EMAIL} owns whatever the test
+   * created.
+   */
+  public static final String ORDINARY_EMAIL = "user@theagencyhq.dev";
+  /**
    * The FusionAuth user every test authenticates as, provisioned by {@code src/main/fusionauth/kickstart}.
    */
   public static final String TEST_EMAIL = "admin@theagencyhq.dev";
@@ -71,11 +77,27 @@ public abstract class BaseTest {
   public static OIDCTestFixture apiOIDC;
   public static BriefingService briefingService;
   public static DatabaseService db;
+  /**
+   * The real FusionAuth client, for the membership tests to look up and clean up the users the invite flow
+   * creates. Everything else authenticates through the OIDC fixtures rather than this.
+   */
+  public static FusionAuthClient fusionAuth;
   public static FakeGitHubClient github = new FakeGitHubClient();
   public static GitHubLinkService links;
   public static Main main;
+  public static MembershipService membershipService;
+  /**
+   * The {@link #ORDINARY_EMAIL} user as the application sees it, resolved from FusionAuth in {@code beforeSuite}
+   * because the kickstart generates the UUID.
+   */
+  public static User ordinaryUser;
   public static OrganizationService organizationService;
   public static PollerService pollerService;
+  /**
+   * The {@link #TEST_EMAIL} user as the application sees it — the creator and OWNER of everything the helpers
+   * below insert. Resolved from FusionAuth in {@code beforeSuite} because the kickstart generates the UUID.
+   */
+  public static User testUser;
   /**
    * The admin UI's login fixture, bound to the Agency Application.
    */
@@ -96,19 +118,30 @@ public abstract class BaseTest {
     briefingService = Services.briefingService();
     db = Services.databaseService();
     links = Services.gitHubLinkService();
+    membershipService = Services.membershipService();
     organizationService = Services.organizationService();
     pollerService = Services.pollerService();
     apiOIDC = new OIDCTestFixture(test, main.apiConfig);
     ssrOIDC = new OIDCTestFixture(test, main.ssrConfig, main.ssrSettings);
 
-    // Not needed for anything the tests do -- they authenticate through the browser and API flows -- but checking
-    // that the Kickstart user exists up front turns "FusionAuth was never provisioned" into one clear message
-    // instead of a login failure in every HTTP test class.
-    var fusionAuth = new FusionAuthClient(main.config.get("fusionauth.apiKey"), main.config.get("fusionauth.baseURL"));
-    var response = fusionAuth.retrieveUser(null, null, null, null, TEST_EMAIL, null);
-    assertNotNull(response, "FusionAuth has no user [" + TEST_EMAIL + "]. Run `docker compose up -d` in "
+    // The two kickstart users, resolved once for the whole suite: the UUIDs are generated at kickstart time, and
+    // membership rows key on them. The lookups double as the provisioning check they always were -- a missing user
+    // turns into one clear message here instead of a login failure in every HTTP test class.
+    fusionAuth = new FusionAuthClient(main.config.get("fusionauth.apiKey"), main.config.get("fusionauth.baseURL"));
+    testUser = kickstartUser(TEST_EMAIL);
+    ordinaryUser = kickstartUser(ORDINARY_EMAIL);
+  }
+
+  /**
+   * @param email One of the kickstart-provisioned users' emails.
+   * @return The user as the application sees it.
+   */
+  public static User kickstartUser(String email) {
+    var response = fusionAuth.retrieveUser(null, null, null, null, email, null);
+    assertNotNull(response, "FusionAuth has no user [" + email + "]. Run `docker compose up -d` in "
         + "src/main/fusionauth, and `docker compose down -v` first if it was provisioned from an older "
         + "kickstart.json");
+    return UserService.toUser(response.user());
   }
 
   /**
@@ -155,6 +188,25 @@ public abstract class BaseTest {
   }
 
   /**
+   * Inserts a membership row directly, for tests that need a specific role or state without walking the invite
+   * flow.
+   *
+   * @param organization The Organization.
+   * @param user         The member.
+   * @param role         Their role.
+   * @param state        ACTIVE or PENDING.
+   * @return The inserted member.
+   */
+  public static Member insertMember(Organization organization, User user, Role role, MembershipState state) {
+    var member = new Member(organization.id(), user.userId(), role, state,
+        state == MembershipState.PENDING ? testUser.userId() : null,
+        state == MembershipState.PENDING ? TEST_INSTANT : null,
+        state == MembershipState.ACTIVE ? TEST_INSTANT : null);
+    db.insertMember(member);
+    return member;
+  }
+
+  /**
    * Inserts an Organization under a generated name. Names are unique case-insensitively, and the database is shared
    * by the whole suite, so a generated name is the only kind that cannot collide with another test's.
    *
@@ -165,12 +217,18 @@ public abstract class BaseTest {
   }
 
   /**
+   * Inserts an Organization with {@link #testUser} seated as its ACTIVE OWNER, matching what creating one through
+   * the service or the form produces — and what nearly every test needs now that memberships gate both the admin
+   * UI and the APIs. A test that wants an Organization the test user cannot see inserts a
+   * {@code new Organization(...)} through {@link DatabaseService#insertOrganization} directly.
+   *
    * @param name The Organization's display name.
    * @return The inserted Organization.
    */
   public static Organization insertOrganization(String name) {
     var organization = new Organization(UUID.randomUUID(), name, null, TEST_INSTANT, TEST_INSTANT);
     db.insertOrganization(organization);
+    insertMember(organization, testUser, Role.OWNER, MembershipState.ACTIVE);
     return organization;
   }
 
@@ -192,7 +250,7 @@ public abstract class BaseTest {
    * <p>Load-bearing, not decoration: without it {@code anAnonymousVisitorIsSentToLogin} and
    * {@code everyAdminPathIsGated} both pass on a session some earlier method left behind.
    *
-   * <p>Named for what it does rather than {@code afterMethod} because {@link AdminUITest} declares one of those: a
+   * <p>Named for what it does rather than {@code afterMethod} because {@link AdminUIIntegrationTest} declares one of those: a
    * subclass method with the same signature would override this one, and the override would silently skip it.
    */
   @AfterMethod(alwaysRun = true)

@@ -6,9 +6,11 @@ package dev.theagencyhq.agency.db.jooq;
 
 import dev.theagencyhq.agency.db.jooq.tables.BriefSources;
 import dev.theagencyhq.agency.db.jooq.tables.Briefs;
+import dev.theagencyhq.agency.db.jooq.tables.Members;
 import dev.theagencyhq.agency.db.jooq.tables.Organizations;
 import dev.theagencyhq.agency.db.jooq.tables.records.BriefSourcesRecord;
 import dev.theagencyhq.agency.db.jooq.tables.records.BriefsRecord;
+import dev.theagencyhq.agency.db.jooq.tables.records.MembersRecord;
 import dev.theagencyhq.agency.db.jooq.tables.records.OrganizationsRecord;
 
 import org.jooq.ForeignKey;
@@ -34,6 +36,7 @@ public class Keys {
     public static final UniqueKey<BriefSourcesRecord> BRIEF_SOURCES_PKEY = Internal.createUniqueKey(BriefSources.BRIEF_SOURCES, DSL.name("brief_sources_pkey"), new TableField[] { BriefSources.BRIEF_SOURCES.ID }, true);
     public static final UniqueKey<BriefsRecord> BRIEFS_ORGANIZATION_ID_VERSION_KEY = Internal.createUniqueKey(Briefs.BRIEFS, DSL.name("briefs_organization_id_version_key"), new TableField[] { Briefs.BRIEFS.ORGANIZATION_ID, Briefs.BRIEFS.VERSION }, true);
     public static final UniqueKey<BriefsRecord> BRIEFS_PKEY = Internal.createUniqueKey(Briefs.BRIEFS, DSL.name("briefs_pkey"), new TableField[] { Briefs.BRIEFS.ID }, true);
+    public static final UniqueKey<MembersRecord> MEMBERS_PKEY = Internal.createUniqueKey(Members.MEMBERS, DSL.name("members_pkey"), new TableField[] { Members.MEMBERS.ORGANIZATION_ID, Members.MEMBERS.USER_ID }, true);
     public static final UniqueKey<OrganizationsRecord> ORGANIZATIONS_PKEY = Internal.createUniqueKey(Organizations.ORGANIZATIONS, DSL.name("organizations_pkey"), new TableField[] { Organizations.ORGANIZATIONS.ID }, true);
 
     // -------------------------------------------------------------------------
@@ -42,4 +45,5 @@ public class Keys {
 
     public static final ForeignKey<BriefSourcesRecord, OrganizationsRecord> BRIEF_SOURCES__BRIEF_SOURCES_ORGANIZATION_ID_FKEY = Internal.createForeignKey(BriefSources.BRIEF_SOURCES, DSL.name("brief_sources_organization_id_fkey"), new TableField[] { BriefSources.BRIEF_SOURCES.ORGANIZATION_ID }, Keys.ORGANIZATIONS_PKEY, new TableField[] { Organizations.ORGANIZATIONS.ID }, true, ForeignKeyRule.CASCADE, ForeignKeyRule.NO_ACTION);
     public static final ForeignKey<BriefsRecord, OrganizationsRecord> BRIEFS__BRIEFS_ORGANIZATION_ID_FKEY = Internal.createForeignKey(Briefs.BRIEFS, DSL.name("briefs_organization_id_fkey"), new TableField[] { Briefs.BRIEFS.ORGANIZATION_ID }, Keys.ORGANIZATIONS_PKEY, new TableField[] { Organizations.ORGANIZATIONS.ID }, true, ForeignKeyRule.CASCADE, ForeignKeyRule.NO_ACTION);
+    public static final ForeignKey<MembersRecord, OrganizationsRecord> MEMBERS__MEMBERS_ORGANIZATION_ID_FKEY = Internal.createForeignKey(Members.MEMBERS, DSL.name("members_organization_id_fkey"), new TableField[] { Members.MEMBERS.ORGANIZATION_ID }, Keys.ORGANIZATIONS_PKEY, new TableField[] { Organizations.ORGANIZATIONS.ID }, true, ForeignKeyRule.CASCADE, ForeignKeyRule.NO_ACTION);
 }

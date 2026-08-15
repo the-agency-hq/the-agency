@@ -17,8 +17,8 @@ import static org.testng.Assert.assertTrue;
  * Drives the admin UI entirely through HTTP, posting forms rather than calling {@code OrganizationService} or
  * {@code PollerService} directly, so the controller's own validation and routing are what is under test.
  */
-@Test
-public class AdminUITest extends BaseTest {
+@Test(groups = "integration")
+public class AdminUIIntegrationTest extends BaseTest {
   public StringBodyAsserter string = new StringBodyAsserter();
 
   @Test
@@ -212,18 +212,22 @@ public class AdminUITest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("BUILD_FAILED").contains("Error:"));
   }
 
+  /**
+   * A malformed id is handled by {@code OrganizationSecurity} before any controller runs, and its answer is the
+   * same silent redirect every failed membership check gets — never a 404 that would confirm what exists.
+   */
   @Test
-  public void malformedOrganizationIdIs404() {
+  public void malformedOrganizationIdRedirectsToTheListing() {
     test.get("/app/organizations/not-a-uuid")
-        .assertStatus(404);
+        .assertRedirect(303, "/app/organizations/");
     test.get("/app/organizations/not-a-uuid/connect")
-        .assertStatus(404);
+        .assertRedirect(303, "/app/organizations/");
     test.post("/app/organizations/not-a-uuid/rebuild")
-        .assertStatus(404);
+        .assertRedirect(303, "/app/organizations/");
     test.get("/app/organizations/not-a-uuid/versions/1")
-        .assertStatus(404);
+        .assertRedirect(303, "/app/organizations/");
     test.get("/app/organizations/not-a-uuid/versions/1/files/0")
-        .assertStatus(404);
+        .assertRedirect(303, "/app/organizations/");
   }
 
   @Test
@@ -249,20 +253,20 @@ public class AdminUITest extends BaseTest {
   }
 
   /**
-   * Both roads to {@link Main#missing} render the styled not-found page rather than the framework's empty-body
-   * 404, which a browser replaces with its own error page or a blank one: a path that matches no route at all
-   * (Web's missing handler), and a matched route whose Organization does not exist (the controllers).
+   * A path that matches no route at all renders {@link Main#missing}'s styled not-found page rather than the
+   * framework's empty-body 404, which a browser replaces with its own error page or a blank one. An Organization
+   * that does not exist is a different case now that memberships gate the pages: {@code OrganizationSecurity}
+   * answers it with the same silent redirect a non-member gets, so a probe cannot tell absent from forbidden.
    */
   @Test
-  public void unmatchedAndMissingPathsRenderTheNotFoundPage() {
+  public void unmatchedPathsRenderTheNotFoundPageAndMissingOrganizationsRedirect() {
     // No route matches at the root, which also means no OIDC gate: the page renders for an anonymous visitor.
     test.get("/nonexistent")
         .assertStatus(404)
         .assertBodyAs(string, b -> b.contains("Page not found"));
 
     test.get("/app/organizations/" + UUID.randomUUID())
-        .assertStatus(404)
-        .assertBodyAs(string, b -> b.contains("Page not found"));
+        .assertRedirect(303, "/app/organizations/");
   }
 
   /**
@@ -300,7 +304,7 @@ public class AdminUITest extends BaseTest {
 
   /**
    * {@code /} is outside the gated {@code /app} prefix and redirects for everyone; the page it points at is what
-   * then demands a session. {@link AdminUIAuthenticationTest#everyAdminPathIsGated} covers the anonymous side of
+   * then demands a session. {@link AdminUIAuthenticationIntegrationTest#everyAdminPathIsGated} covers the anonymous side of
    * that, since this class signs in before every method.
    */
   @Test

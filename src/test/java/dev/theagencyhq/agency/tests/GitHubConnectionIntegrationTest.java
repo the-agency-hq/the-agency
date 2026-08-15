@@ -22,8 +22,8 @@ import static org.testng.Assert.*;
  * table and read back out of it — because that storage is the whole point of the design and stubbing it would
  * leave the part most worth proving untested. Only GitHub itself is faked.
  */
-@Test
-public class GitHubConnectionTest extends BaseTest {
+@Test(groups = "integration")
+public class GitHubConnectionIntegrationTest extends BaseTest {
   public StringBodyAsserter string = new StringBodyAsserter();
 
   /**

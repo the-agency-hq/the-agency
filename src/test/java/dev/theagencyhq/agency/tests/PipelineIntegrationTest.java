@@ -23,7 +23,7 @@ import static org.testng.Assert.*;
  * cannot disturb the state scenario 8 still needs; 8 resumes the original Organization to prove a build failure does
  * not roll back what is already being served.
  */
-@Test
+@Test(groups = "integration")
 public class PipelineIntegrationTest extends BaseTest {
   private final List<UUID> organizationIds = new ArrayList<>();
   private final JSONBodyAsserter json = new JSONBodyAsserter();
@@ -112,7 +112,7 @@ public class PipelineIntegrationTest extends BaseTest {
                        .putFile("claude/settings.json", "{}\n")
                        .putFile("codex/config.toml", "x = 1\n");
 
-    organization = organizationService.create("pipeline-" + UUID.randomUUID());
+    organization = organizationService.create("pipeline-" + UUID.randomUUID(), testUser);
     organizationIds.add(organization.id());
     linkGitHub(organization.id());
     connect(organization.id(), "theagencyhq", "pipeline-briefs");
@@ -151,7 +151,7 @@ public class PipelineIntegrationTest extends BaseTest {
   private void deletingAnOrganizationForcesA200() throws Exception {
     github.add("theagencyhq", "throwaway-briefs").putFile("rules/a.md", "throwaway\n");
 
-    var throwaway = organizationService.create("pipeline-throwaway-" + UUID.randomUUID());
+    var throwaway = organizationService.create("pipeline-throwaway-" + UUID.randomUUID(), testUser);
     organizationIds.add(throwaway.id());
     linkGitHub(throwaway.id());
     connect(throwaway.id(), "theagencyhq", "throwaway-briefs");

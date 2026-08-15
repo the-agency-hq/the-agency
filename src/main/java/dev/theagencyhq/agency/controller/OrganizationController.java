@@ -16,6 +16,7 @@ import dev.theagencyhq.agency.github.GitHubException;
 import dev.theagencyhq.agency.model.github.GitHubRepository;
 import dev.theagencyhq.agency.model.BriefFile;
 import dev.theagencyhq.agency.model.BriefSource;
+import dev.theagencyhq.agency.model.Member;
 import dev.theagencyhq.agency.model.Organization;
 import dev.theagencyhq.agency.model.User;
 import dev.theagencyhq.agency.model.view.BriefFileView;
@@ -23,6 +24,7 @@ import dev.theagencyhq.agency.model.view.BriefVersionView;
 import dev.theagencyhq.agency.model.view.OrganizationConnectView;
 import dev.theagencyhq.agency.model.view.OrganizationDetailView;
 import dev.theagencyhq.agency.model.view.OrganizationsView;
+import dev.theagencyhq.agency.security.OrganizationSecurity;
 import dev.theagencyhq.agency.service.GitHubLinkService;
 import dev.theagencyhq.agency.service.OrganizationService;
 import dev.theagencyhq.agency.service.PollerService;
@@ -39,9 +41,10 @@ import dev.theagencyhq.agency.service.Services;
  * that starts (or restarts) the authorization, and is where the callback lands.
  *
  * <p>Every route here sits behind the browser OIDC profile installed on the {@code /app} prefix, so an
- * unauthenticated visitor is redirected to the provider and never reaches a handler. Authorization is a different
- * question and still has only one answer: any user registered for the Agency's FusionAuth Application can do
- * everything on these pages.
+ * unauthenticated visitor is redirected to the provider and never reaches a handler. Authorization is membership:
+ * {@code OrganizationSecurity} on the {@code /app/organizations} prefix admits only users with a membership row in
+ * the path-bound Organization, and the management routes additionally require an ACTIVE OWNER — see {@code Main}'s
+ * route table.
  */
 public class OrganizationController {
   private final DatabaseService database;
@@ -159,7 +162,7 @@ public class OrganizationController {
     try {
       // Straight to the Organization's page, which owns everything that happens next: it warns that GitHub is not
       // connected yet and carries the button that starts the authorization.
-      var organization = organizationService.create(name);
+      var organization = organizationService.create(name, oidc.user());
       res.sendRedirect("/app/organizations/" + organization.id(), 303);
     } catch (ValidationException e) {
       renderForm(req, res, e.errors(), name == null ? "" : name);
@@ -175,8 +178,10 @@ public class OrganizationController {
 
     var source = database.findSource(organization.id()).orElse(null);
     var versions = database.listBriefs(organization.id());
+    // Cached by OrganizationSecurity, which admits no request without one, so this is a read rather than a query.
+    var membership = (Member) req.getAttribute(OrganizationSecurity.MEMBER_ATTRIBUTE);
     render("pages/detail.jte", req, res,
-        new OrganizationDetailView(organization, source, versions, req.getParameter("status")));
+        new OrganizationDetailView(organization, source, versions, membership, req.getParameter("status")));
   }
 
   public void file(HTTPRequest req, HTTPResponse res) throws IOException {
@@ -228,7 +233,9 @@ public class OrganizationController {
     // carries every Brief's full document with it.
     var latestVersions = database.latestBriefVersions();
 
-    var rows = database.listOrganizations().stream().map(o -> {
+    // The viewer's Organizations, not all of them: membership is what makes one visible here. PENDING rows are
+    // deliberately included, because this listing is how an invited user finds the Organization to accept.
+    var rows = database.listOrganizationsForUser(oidc.user().userId()).stream().map(o -> {
       var source = sourcesByOrganization.get(o.id());
       return new OrganizationsView.Row(
           o.id(),

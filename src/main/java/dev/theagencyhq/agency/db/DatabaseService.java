@@ -10,6 +10,9 @@ import module org.lattejava.database;
 import com.zaxxer.hikari.*;
 import dev.theagencyhq.agency.error.*;
 import dev.theagencyhq.agency.model.*;
+// Single-type, on top of the star import above, because org.jooq also exports a Role and the two star imports
+// would otherwise make every unqualified use ambiguous.
+import dev.theagencyhq.agency.model.Role;
 import dev.theagencyhq.agency.model.github.*;
 import dev.theagencyhq.agency.model.internal.*;
 import org.jooq.*;
@@ -119,6 +122,17 @@ public class DatabaseService {
             record.get(ORGANIZATIONS.GITHUB_REFRESH_EXPIRATION)));
   }
 
+  private static Member toMember(org.jooq.Record record) {
+    return new Member(
+        record.get(MEMBERS.ORGANIZATION_ID),
+        record.get(MEMBERS.USER_ID),
+        record.get(MEMBERS.ROLE),
+        record.get(MEMBERS.STATE),
+        record.get(MEMBERS.INVITED_BY),
+        record.get(MEMBERS.INVITED_AT),
+        record.get(MEMBERS.JOINED_AT));
+  }
+
   private static Organization toOrganization(org.jooq.Record record) {
     return new Organization(
         record.get(ORGANIZATIONS.ID),
@@ -192,12 +206,38 @@ public class DatabaseService {
     dataSource.close();
   }
 
+  /**
+   * Idempotent: removing a row that does not exist removes nothing. One method serves declining an invitation,
+   * cancelling one, removing a member, and leaving — all four end with the row gone.
+   *
+   * @param organizationId The Organization.
+   * @param userId         The member's FusionAuth user UUID.
+   */
+  public void deleteMember(UUID organizationId, UUID userId) {
+    dsl.deleteFrom(MEMBERS)
+       .where(MEMBERS.ORGANIZATION_ID.eq(organizationId))
+       .and(MEMBERS.USER_ID.eq(userId))
+       .execute();
+  }
+
   public void deleteOrganization(UUID id) {
     dsl.deleteFrom(ORGANIZATIONS).where(ORGANIZATIONS.ID.eq(id)).execute();
   }
 
   public DSLContext dsl() {
     return dsl;
+  }
+
+  /**
+   * @param organizationId The Organization.
+   * @return Its ACTIVE OWNER members — the set the last-owner rules count before a demotion, removal, or leave.
+   */
+  public List<Member> findActiveOwners(UUID organizationId) {
+    return dsl.selectFrom(MEMBERS)
+              .where(MEMBERS.ORGANIZATION_ID.eq(organizationId))
+              .and(MEMBERS.ROLE.eq(Role.OWNER))
+              .and(MEMBERS.STATE.eq(MembershipState.ACTIVE))
+              .fetch(DatabaseService::toMember);
   }
 
   public Optional<Brief> findBrief(UUID organizationId, int version) {
@@ -213,6 +253,13 @@ public class DatabaseService {
               .orderBy(BRIEFS.VERSION.desc())
               .limit(1)
               .fetchOptional(DatabaseService::toBrief);
+  }
+
+  public Optional<Member> findMember(UUID organizationId, UUID userId) {
+    return dsl.selectFrom(MEMBERS)
+              .where(MEMBERS.ORGANIZATION_ID.eq(organizationId))
+              .and(MEMBERS.USER_ID.eq(userId))
+              .fetchOptional(DatabaseService::toMember);
   }
 
   public Optional<Organization> findOrganization(UUID id) {
@@ -316,6 +363,21 @@ public class DatabaseService {
   }
 
   /**
+   * @param member The membership row to insert, whole — every column comes off the model, like the other inserts.
+   */
+  public void insertMember(Member member) {
+    dsl.insertInto(MEMBERS)
+       .set(MEMBERS.ORGANIZATION_ID, member.organizationId())
+       .set(MEMBERS.USER_ID, member.userId())
+       .set(MEMBERS.ROLE, member.role())
+       .set(MEMBERS.STATE, member.state())
+       .set(MEMBERS.INVITED_BY, member.invitedBy())
+       .set(MEMBERS.INVITED_AT, member.invitedAt())
+       .set(MEMBERS.JOINED_AT, member.joinedAt())
+       .execute();
+  }
+
+  /**
    * @param organization The Organization to insert.
    * @throws ValidationException if another Organization already holds the name, case-insensitively.
    */
@@ -401,8 +463,42 @@ public class DatabaseService {
               .fetch(DatabaseService::toBrief);
   }
 
+  public List<Member> listMembers(UUID organizationId) {
+    return dsl.selectFrom(MEMBERS)
+              .where(MEMBERS.ORGANIZATION_ID.eq(organizationId))
+              .fetch(DatabaseService::toMember);
+  }
+
   public List<Organization> listOrganizations() {
     return dsl.selectFrom(ORGANIZATIONS).orderBy(ORGANIZATIONS.NAME).fetch(DatabaseService::toOrganization);
+  }
+
+  public List<Organization> listOrganizationsForUser(UUID userId) {
+    return listOrganizationsForUser(userId, null);
+  }
+
+  /**
+   * The Organizations a user belongs to, in name order like {@link #listOrganizations()}.
+   *
+   * @param userId The user whose memberships drive the result.
+   * @param state  Narrow to memberships in this state, or {@code null} for all of them. The admin UI passes
+   *               {@code null} so an invited user can find the Organization and accept; the APIs pass
+   *               {@link MembershipState#ACTIVE} because an invitation someone has not accepted entitles their
+   *               Handler to nothing.
+   * @return The matching Organizations.
+   */
+  public List<Organization> listOrganizationsForUser(UUID userId, MembershipState state) {
+    Condition where = MEMBERS.USER_ID.eq(userId);
+    if (state != null) {
+      where = where.and(MEMBERS.STATE.eq(state));
+    }
+
+    return dsl.select(ORGANIZATIONS.fields())
+              .from(ORGANIZATIONS)
+              .join(MEMBERS).on(MEMBERS.ORGANIZATION_ID.eq(ORGANIZATIONS.ID))
+              .where(where)
+              .orderBy(ORGANIZATIONS.NAME)
+              .fetch(DatabaseService::toOrganization);
   }
 
   public List<BriefSource> listSources() {
@@ -432,6 +528,30 @@ public class DatabaseService {
               .set(ORGANIZATIONS.UPDATE_INSTANT, updateInstant)
               .where(ORGANIZATIONS.ID.eq(organizationId))
               .execute() == 1;
+  }
+
+  public void updateMemberRole(UUID organizationId, UUID userId, Role role) {
+    dsl.update(MEMBERS)
+       .set(MEMBERS.ROLE, role)
+       .where(MEMBERS.ORGANIZATION_ID.eq(organizationId))
+       .and(MEMBERS.USER_ID.eq(userId))
+       .execute();
+  }
+
+  /**
+   * @param organizationId The Organization.
+   * @param userId         The member.
+   * @param state          The new state.
+   * @param joinedAt       When the member joined — set alongside the state because the only transition is
+   *                       PENDING to ACTIVE, and the moment of acceptance is exactly when that timestamp exists.
+   */
+  public void updateMemberState(UUID organizationId, UUID userId, MembershipState state, Instant joinedAt) {
+    dsl.update(MEMBERS)
+       .set(MEMBERS.STATE, state)
+       .set(MEMBERS.JOINED_AT, joinedAt)
+       .where(MEMBERS.ORGANIZATION_ID.eq(organizationId))
+       .and(MEMBERS.USER_ID.eq(userId))
+       .execute();
   }
 
   /**

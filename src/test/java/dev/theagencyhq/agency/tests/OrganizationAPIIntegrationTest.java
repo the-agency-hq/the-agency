@@ -5,6 +5,7 @@
 package dev.theagencyhq.agency.tests;
 
 import module java.base;
+import module dev.theagencyhq.agency;
 import module org.lattejava.web;
 import module org.testng;
 
@@ -17,8 +18,8 @@ import module org.testng;
  * Organization ids, and the {@code updateInstant} the link flow moves — are {@code ${...}} substitution tokens,
  * supplied from the records the test created.
  */
-@Test
-public class OrganizationAPITest extends BaseTest {
+@Test(groups = "integration")
+public class OrganizationAPIIntegrationTest extends BaseTest {
   public JSONBodyAsserter json = new JSONBodyAsserter();
 
   /**
@@ -42,13 +43,20 @@ public class OrganizationAPITest extends BaseTest {
   }
 
   /**
-   * The caller's entitled set is still every Organization (2026-07-30 design §10.2, decision 3), in the name order
-   * {@code DatabaseService.listOrganizations} defines — the same list the admin UI shows.
+   * The caller's entitled set is their ACTIVE memberships, in name order — {@code insertOrganization} seats the
+   * test user as ACTIVE OWNER of both, so both come back. A PENDING invitation and someone else's Organization
+   * both stay out, which is the membership boundary this API now enforces.
    */
   @Test
-  public void listReturnsEveryOrganization() throws Exception {
+  public void listReturnsTheCallersActiveOrganizations() throws Exception {
     var alpha = insertOrganization("alpha");
     var beta = insertOrganization("beta");
+
+    // Invisible to the caller: an Organization they were merely invited to, and one they have no row in at all.
+    var invited = new Organization(UUID.randomUUID(), "gamma-invited", null, TEST_INSTANT, TEST_INSTANT);
+    db.insertOrganization(invited);
+    insertMember(invited, testUser, Role.CONTRIBUTOR, MembershipState.PENDING);
+    db.insertOrganization(new Organization(UUID.randomUUID(), "delta-foreign", null, TEST_INSTANT, TEST_INSTANT));
 
     organizations()
         .assertStatus(200)

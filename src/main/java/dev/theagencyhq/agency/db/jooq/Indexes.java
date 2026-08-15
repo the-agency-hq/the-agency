@@ -5,6 +5,7 @@ package dev.theagencyhq.agency.db.jooq;
 
 
 import dev.theagencyhq.agency.db.jooq.tables.Briefs;
+import dev.theagencyhq.agency.db.jooq.tables.Members;
 
 import org.jooq.Index;
 import org.jooq.OrderField;
@@ -23,4 +24,5 @@ public class Indexes {
     // -------------------------------------------------------------------------
 
     public static final Index BRIEFS_IDX_ORGANIZATION_VERSION = Internal.createIndex(DSL.name("briefs_idx_organization_version"), Briefs.BRIEFS, new OrderField[] { Briefs.BRIEFS.ORGANIZATION_ID, Briefs.BRIEFS.VERSION.desc() }, false);
+    public static final Index MEMBERS_IDX_USER_ID = Internal.createIndex(DSL.name("members_idx_user_id"), Members.MEMBERS, new OrderField[] { Members.MEMBERS.USER_ID }, false);
 }

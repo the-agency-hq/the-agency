@@ -6,6 +6,7 @@ package dev.theagencyhq.agency.db.jooq;
 
 import dev.theagencyhq.agency.db.jooq.tables.BriefSources;
 import dev.theagencyhq.agency.db.jooq.tables.Briefs;
+import dev.theagencyhq.agency.db.jooq.tables.Members;
 import dev.theagencyhq.agency.db.jooq.tables.Organizations;
 
 import java.util.Arrays;
@@ -41,6 +42,11 @@ public class Public extends SchemaImpl {
     public final Briefs BRIEFS = Briefs.BRIEFS;
 
     /**
+     * The table <code>public.members</code>.
+     */
+    public final Members MEMBERS = Members.MEMBERS;
+
+    /**
      * The table <code>public.organizations</code>.
      */
     public final Organizations ORGANIZATIONS = Organizations.ORGANIZATIONS;
@@ -63,6 +69,7 @@ public class Public extends SchemaImpl {
         return Arrays.asList(
             BriefSources.BRIEF_SOURCES,
             Briefs.BRIEFS,
+            Members.MEMBERS,
             Organizations.ORGANIZATIONS
         );
     }

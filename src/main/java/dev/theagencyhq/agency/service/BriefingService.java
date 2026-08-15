@@ -11,8 +11,8 @@ import dev.theagencyhq.agency.model.*;
 import dev.theagencyhq.agency.model.api.*;
 
 /**
- * Decides what a Handler is told. A pure function over what the Handler asserted and what the database holds — no I/O,
- * no state — so the whole §10.2 matrix is testable without a database or a socket.
+ * Decides what a Handler is told. A pure function over who is asking, what their Handler asserted, and what the
+ * database holds — no other I/O, no state — so the whole §10.2 matrix is testable without a socket.
  */
 public class BriefingService {
   private final DatabaseService databaseService;
@@ -23,10 +23,12 @@ public class BriefingService {
 
   /**
    * @param request The API request.
+   * @param user    The caller, whose ACTIVE memberships are the entitled set. A PENDING invitation entitles a Handler
+   *                to nothing — nobody has accepted it yet.
    * @return The outcome.
    */
-  public BriefingOutcome decide(BriefingRequest request) {
-    var organizations = databaseService.listOrganizations();
+  public BriefingOutcome runBriefing(BriefingRequest request, User user) {
+    var organizations = databaseService.listOrganizationsForUser(user.userId(), MembershipState.ACTIVE);
     var latestBriefs = databaseService.latestBriefs();
 
     // One canonical ordering for both output arrays, keyed on the id's String form. The wire carries strings and the

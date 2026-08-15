@@ -8,9 +8,14 @@ Handlers — so a local instance has to be running before the server starts or t
 
     cd src/main/fusionauth && docker compose up -d
 
-It comes up on `http://localhost:9016` with two Applications and the user `admin@theagencyhq.dev` / `password`
-registered for both, all provisioned by Kickstart. Kickstart only runs against an empty database, so
-re-provisioning after changing `kickstart.json` needs `docker compose down -v` first.
+It comes up on `http://localhost:9016` with two Applications and two users — `admin@theagencyhq.dev` and
+`user@theagencyhq.dev`, both `password` — registered for both, all provisioned by Kickstart. Kickstart only runs
+against an empty database, so re-provisioning after changing `kickstart.json` needs `docker compose down -v` first.
+
+The compose stack also runs Mailcatcher, and the Kickstart points the tenant's SMTP configuration at it: the
+invitation and set-password emails the membership pages send land at <http://localhost:1080> instead of failing.
+The email templates themselves live in `src/main/fusionauth/kickstart/emails/` and are provisioned by Kickstart
+like everything else.
 
 | Application           | Who uses it            | Why it is its own client                                        |
 |-----------------------|------------------------|-----------------------------------------------------------------|
@@ -32,6 +37,22 @@ FusionAuth is a startup dependency, not just a request-time one: `Main` runs OID
 while it is constructing, so with FusionAuth down the Agency fails to start with `Failed to fetch OIDC discovery
 document for issuer [...]` rather than starting up unable to validate a single token. Once it is running, nothing
 in the request path calls FusionAuth — access tokens are JWTs, verified locally against the cached JWKS.
+
+## Organizations have members
+
+Every Organization page sits behind a membership check: creating an Organization seats you as its ACTIVE `OWNER`,
+and nobody else sees it until you invite them. **Members** on the Organization's page (Owners only) lists everyone
+and offers the invite, change-role, and remove flows; invitees see the Organization in their listing with an
+Accept/Decline banner on its page, and any active member can leave — except the last active Owner, who has to
+promote someone first.
+
+Inviting goes by email, through FusionAuth. An email FusionAuth already knows gets the invitation email; an
+unknown one gets a FusionAuth account created for it, and the set-password email doubles as the invitation. Both
+land in Mailcatcher locally.
+
+Roles: an `OWNER` manages members and the GitHub connection; a `CONTRIBUTOR` views the Organization, its Briefs,
+and can trigger rebuilds. The APIs follow the same boundary — `GET /api/v1/organization` and
+`POST /api/v1/briefing` serve the caller's ACTIVE memberships, nothing more.
 
 ## Brief sources come from GitHub
 
@@ -57,8 +78,9 @@ else in the admin UI works without one.
 
 ## Running the tests
 
-The tests need PostgreSQL (`the_agency_test`) and the FusionAuth above. They authenticate as
-`admin@theagencyhq.dev` through two real authorization-code flows, once per suite — one per Application. GitHub is
+The tests need PostgreSQL (`the_agency_test`) and the FusionAuth above. They authenticate as the two Kickstart
+users through real authorization-code flows — `admin@theagencyhq.dev` owns what a test creates, and
+`user@theagencyhq.dev` is the one invited, promoted, and turned away by the membership tests. GitHub is
 the one thing they fake: `FakeGitHubClient` is an in-memory GitHub injected into `Main`, so no GitHub App and no
 network are needed. The GitHub credentials they store are written to the real local Postgres.
 

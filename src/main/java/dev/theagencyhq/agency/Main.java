@@ -17,9 +17,9 @@ public class Main {
   public static final Path BASE_DIR = Path.of("web");
   public static final int PORT = 8080;
   public static final List<String> REQUIRED_CONFIG = List.of("db.password", "db.url", "db.username",
-      "fusionauth.baseURL", "fusionauth.clientId", "fusionauth.clientSecret", "fusionauth.handlerClientId",
-      "fusionauth.handlerClientSecret", "fusionauth.issuer", "github.appName", "github.clientId",
-      "github.clientSecret", "web.cookieEncryptionKey");
+      "fusionauth.apiKey", "fusionauth.baseURL", "fusionauth.clientId", "fusionauth.clientSecret",
+      "fusionauth.handlerClientId", "fusionauth.handlerClientSecret", "fusionauth.issuer", "github.appName",
+      "github.clientId", "github.clientSecret", "web.cookieEncryptionKey");
   /**
    * Static rather than per-instance so {@link #missing} can render without a Main, but built from the same two constant
    * paths an instance always used.
@@ -129,10 +129,18 @@ public class Main {
 
   public void main() {
     var briefing = new BriefingController(apiOIDC, Services.briefingService());
-    var github = new GitHubController(cookies);
+    var github = new GitHubController(cookies, ssrOIDC);
+    var members = new MembershipController(ssrOIDC, TEMPLATES);
     var organizations = new OrganizationController(
         "https://github.com/apps/" + config.get("github.appName") + "/installations/new", ssrOIDC, TEMPLATES);
     var organizationAPI = new OrganizationAPIController(apiOIDC, Services.databaseService());
+
+    // Installed once on the literal /app/organizations prefix, mirroring latte-java/app's GroupSecurity: a route
+    // without an {organizationId} attribute passes through, and every route with one requires the signed-in user
+    // to hold a membership row in that Organization. The role gates below layer on top of it per route.
+    var organizationSecurity = new OrganizationSecurity(ssrOIDC);
+    var isActiveMember = organizationSecurity.hasRole(Role.CONTRIBUTOR, Role.OWNER);
+    var isOwner = organizationSecurity.hasRole(Role.OWNER);
 
     // addShutdownTask is what makes Services.shutdown() reachable in production at all: Web installs its own JVM
     // shutdown hook, so on SIGTERM this is what closes the HikariCP pool and the poller's scheduler instead of
@@ -175,15 +183,37 @@ public class Main {
                     }
                 )
                 .prefix("/organizations", orgs -> {
+                      orgs.install(organizationSecurity);
                       orgs.get("/", organizations::list);
                       orgs.get("/new", organizations::newForm);
                       orgs.post("/", organizations::create);
+                      // Base-gated only (any membership row, PENDING included): the Organization's page is where
+                      // an invited user finds Accept and Decline, so it cannot demand what accepting grants.
                       orgs.get("/{organizationId}", organizations::detail);
-                      orgs.get("/{organizationId}/connect", organizations::connect);
-                      orgs.post("/{organizationId}/connect", organizations::connectSource);
-                      orgs.post("/{organizationId}/rebuild", organizations::rebuild);
+                      // Owner-only: these swap the Organization's source repository.
+                      orgs.get("/{organizationId}/connect", organizations::connect, isOwner);
+                      orgs.post("/{organizationId}/connect", organizations::connectSource, isOwner);
+                      // Any ACTIVE member: rebuilding produces a new version but changes no configuration.
+                      orgs.post("/{organizationId}/rebuild", organizations::rebuild, isActiveMember);
                       orgs.get("/{organizationId}/versions/{version}", organizations::version);
                       orgs.get("/{organizationId}/versions/{version}/files/{index}", organizations::file);
+
+                      // Member administration is owner-only. Accept, decline, and leave always act on the signed-in
+                      // user's own row — no {userId} in the path — and stay base-gated: accept and decline must
+                      // reach the controller for PENDING invitees, and a PENDING leaver just deletes their own
+                      // invitation, same as declining.
+                      orgs.prefix("/{organizationId}/members", membersRoutes ->
+                          membersRoutes.get("/", members::list, isOwner)
+                                       .get("/invite", members::inviteForm, isOwner)
+                                       .post("/invite", members::invite, isOwner)
+                                       .post("/accept", members::accept)
+                                       .post("/decline", members::decline)
+                                       .get("/leave", members::leaveForm)
+                                       .post("/leave", members::leave)
+                                       .get("/{userId}/remove", members::removeForm, isOwner)
+                                       .post("/{userId}/remove", members::remove, isOwner)
+                                       .get("/{userId}/role", members::changeRoleForm, isOwner)
+                                       .post("/{userId}/role", members::changeRole, isOwner));
                     }
                 );
            }

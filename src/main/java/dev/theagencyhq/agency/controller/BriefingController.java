@@ -32,9 +32,8 @@ public class BriefingController {
 
   public void briefing(HTTPRequest req, HTTPResponse res, BriefingRequest body) throws Exception {
     // Resolved first, before any work, for the same reason every controller in latte-java/app resolves it first:
-    // this is the caller the whole request is on behalf of. Nothing here varies by user yet -- `entitled` is still
-    // every Organization (design §10.2, decision 3) -- so it only reaches the response log below, and it is the
-    // value the membership lookup will take when entitlements arrive.
+    // this is the caller the whole request is on behalf of, and their ACTIVE memberships are the entitled set the
+    // decision below is made over (design §10.4).
     var user = oidc.user();
 
     // Handle an empty request as though it was a blank assertion
@@ -50,7 +49,7 @@ public class BriefingController {
       return;
     }
 
-    var outcome = briefingService.decide(body);
+    var outcome = briefingService.runBriefing(body, user);
     switch (outcome) {
       case BriefingOutcome.NotModified _ -> res.setStatus(304);
       case BriefingOutcome.Updated updated -> write(res, updated, user);

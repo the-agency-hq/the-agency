@@ -154,7 +154,7 @@ public class PollerServiceTest extends BaseTest {
   @BeforeMethod
   public void createSource() {
     repository = github.add("acme", "briefs").putFile("rules/a.md", "first\n");
-    organization = organizationService.create("poller-" + UUID.randomUUID());
+    organization = organizationService.create("poller-" + UUID.randomUUID(), testUser);
     linkGitHub(organization.id());
     connect(organization.id(), "acme", "briefs");
   }

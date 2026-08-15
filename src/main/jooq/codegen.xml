@@ -26,7 +26,27 @@
             <from>t -&gt; t == null ? null : java.time.Instant.ofEpochMilli(t)</from>
             <to>u -&gt; u == null ? null : u.toEpochMilli()</to>
           </lambdaConverter>
-          <includeExpression>.*\.(insert_instant|update_instant|last_polled_instant|github_access_expiration|github_refresh_expiration)</includeExpression>
+          <includeExpression>.*\.(insert_instant|update_instant|last_polled_instant|github_access_expiration|github_refresh_expiration|invited_at|joined_at)</includeExpression>
+        </forcedType>
+
+        <!-- members.role -> Role -->
+        <forcedType>
+          <userType>dev.theagencyhq.agency.model.Role</userType>
+          <lambdaConverter>
+            <from>t -&gt; t == null ? null : dev.theagencyhq.agency.model.Role.valueOf(t)</from>
+            <to>u -&gt; u == null ? null : u.name()</to>
+          </lambdaConverter>
+          <includeExpression>.*\.members\.role</includeExpression>
+        </forcedType>
+
+        <!-- members.state -> MembershipState -->
+        <forcedType>
+          <userType>dev.theagencyhq.agency.model.MembershipState</userType>
+          <lambdaConverter>
+            <from>t -&gt; t == null ? null : dev.theagencyhq.agency.model.MembershipState.valueOf(t)</from>
+            <to>u -&gt; u == null ? null : u.name()</to>
+          </lambdaConverter>
+          <includeExpression>.*\.members\.state</includeExpression>
         </forcedType>
 
         <!-- brief_sources.last_status -> SourceStatus -->

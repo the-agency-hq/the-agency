@@ -6,8 +6,8 @@ package dev.theagencyhq.agency.tests;
 
 import module org.testng;
 
-@Test
-public class MainTest extends BaseTest {
+@Test(groups = "integration")
+public class MainIntegrationTest extends BaseTest {
   @Test
   public void getSlash() {
     test.get("/")

@@ -22,6 +22,7 @@ public class Services {
   private static DatabaseService databaseService;
   private static GitHubClient gitHubClient;
   private static GitHubLinkService gitHubLinkService;
+  private static MembershipService membershipService;
   private static OrganizationService organizationService;
   private static PollerService pollerService;
   private static final AtomicBoolean shutdownStarted = new AtomicBoolean();
@@ -64,6 +65,7 @@ public class Services {
     briefBuilder = new BriefBuilder();
     briefingService = new BriefingService(databaseService);
     gitHubLinkService = new GitHubLinkService(config, databaseService, gitHubClient);
+    membershipService = new MembershipService(config, databaseService);
     organizationService = new OrganizationService(databaseService, gitHubClient);
     pollerService = new PollerService(databaseService, gitHubClient, gitHubLinkService, briefBuilder,
         config.getInteger("poller.intervalSeconds", 60));
@@ -74,6 +76,10 @@ public class Services {
     if (config.getBoolean("poller.enabled", true)) {
       pollerService.start();
     }
+  }
+
+  public static MembershipService membershipService() {
+    return membershipService;
   }
 
   public static OrganizationService organizationService() {

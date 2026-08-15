@@ -2451,7 +2451,7 @@ public class BriefingServiceTest {
   public void aDeletedOrganizationForcesA200() {
     // The Handler still asserts ORG_B, but it is no longer entitled or deliverable. Without the set comparison
     // this would 304 and the Handler would keep serving a Brief forever.
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a")),
         Map.of(ORG_A, brief(ORG_A, 1, "sum-a", "{\"a\":1}")),
         List.of(new CurrentVersion(ORG_A.toString(), 1, "sum-a"), new CurrentVersion(ORG_B.toString(), 3, "sum-b")));
@@ -2463,7 +2463,7 @@ public class BriefingServiceTest {
 
   @Test
   public void aaColdStoreReceivesEverything() {
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a")),
         Map.of(ORG_A, brief(ORG_A, 1, "sum-a", "{\"a\":1}")),
         List.of());
@@ -2475,7 +2475,7 @@ public class BriefingServiceTest {
   @Test
   public void anUnbuiltOrganizationDoesNotBlockA304() {
     // ORG_B is entitled but has no Brief, so it is not deliverable and must not make a 304 impossible forever.
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a"), org(ORG_B, "b")),
         Map.of(ORG_A, brief(ORG_A, 1, "sum-a", "{\"a\":1}")),
         List.of(new CurrentVersion(ORG_A.toString(), 1, "sum-a")));
@@ -2485,7 +2485,7 @@ public class BriefingServiceTest {
 
   @Test
   public void currentEverythingIsNotModified() {
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a")),
         Map.of(ORG_A, brief(ORG_A, 7, "sum-a", "{\"a\":1}")),
         List.of(new CurrentVersion(ORG_A.toString(), 7, "sum-a")));
@@ -2495,7 +2495,7 @@ public class BriefingServiceTest {
 
   @Test
   public void unbuiltOrganizationsStillAppearInOrganizationIds() {
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a"), org(ORG_B, "b")),
         Map.of(),
         List.of());
@@ -2506,7 +2506,7 @@ public class BriefingServiceTest {
 
   @Test
   public void unparseableAssertedIdIsTreatedAsUnknown() {
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a")),
         Map.of(ORG_A, brief(ORG_A, 1, "sum-a", "{\"a\":1}")),
         List.of(new CurrentVersion("not-a-uuid", 1, "x")));
@@ -2516,7 +2516,7 @@ public class BriefingServiceTest {
 
   @Test
   public void wrongChecksumResends() {
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a")),
         Map.of(ORG_A, brief(ORG_A, 7, "sum-a", "{\"a\":1}")),
         List.of(new CurrentVersion(ORG_A.toString(), 7, "corrupt")));
@@ -2526,7 +2526,7 @@ public class BriefingServiceTest {
 
   @Test
   public void wrongVersionResends() {
-    var outcome = new BriefingService().decide(
+    var outcome = new BriefingService().runBriefing(
         List.of(org(ORG_A, "a")),
         Map.of(ORG_A, brief(ORG_A, 7, "sum-a", "{\"a\":1}")),
         List.of(new CurrentVersion(ORG_A.toString(), 6, "sum-old")));
@@ -2869,7 +2869,7 @@ public class BriefingController {
       return;
     }
 
-    var outcome = briefingService.decide(databaseService.listOrganizations(), databaseService.latestBriefs(), asserted);
+    var outcome = briefingService.runBriefing(databaseService.listOrganizations(), databaseService.latestBriefs(), asserted);
     switch (outcome) {
       case BriefingOutcome.NotModified _ -> res.setStatus(304);
       case BriefingOutcome.Updated updated -> write(res, updated);

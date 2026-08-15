@@ -19,7 +19,7 @@ public class Main {
   public static final List<String> REQUIRED_CONFIG = List.of("db.password", "db.url", "db.username",
       "fusionauth.apiKey", "fusionauth.baseURL", "fusionauth.clientId", "fusionauth.clientSecret",
       "fusionauth.handlerClientId", "fusionauth.handlerClientSecret", "fusionauth.issuer", "github.appName",
-      "github.clientId", "github.clientSecret", "web.cookieEncryptionKey");
+      "github.clientId", "github.clientSecret", "runtime.mode", "web.cookieEncryptionKey");
   /**
    * Static rather than per-instance so {@link #missing} can render without a Main, but built from the same two constant
    * paths an instance always used.

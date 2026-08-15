@@ -29,12 +29,12 @@
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
                 <tr>
                   <td align="center" bgcolor="#0e7490" style="border-radius:8px;">
-                    <a href="${tenant.issuer}/password/change/${changePasswordId}?tenantId=${user.tenantId}&client_id=7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742&redirect_uri=${'http://localhost:8080/oidc/return'?url('UTF-8')}&response_type=code" target="_blank" style="display:inline-block; padding:12px 28px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">Set my password</a>
+                    <a href="${tenant.issuer}/password/change/${changePasswordId}?tenantId=${user.tenantId}&client_id=7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742&redirect_uri=${(((user.data.url)!'http://localhost:8080') + '/oidc/return')?url('UTF-8')}&response_type=code" target="_blank" style="display:inline-block; padding:12px 28px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">Set my password</a>
                   </td>
                 </tr>
               </table>
               <p style="margin:16px 0 0 0; font-size:13px; line-height:1.5; color:#62748e;">If the button doesn't work, copy and paste this link into your browser:</p>
-              <p style="margin:6px 0 0 0; font-size:13px; line-height:1.5; word-break:break-all;"><a href="${tenant.issuer}/password/change/${changePasswordId}?tenantId=${user.tenantId}&client_id=7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742&redirect_uri=${'http://localhost:8080/oidc/return'?url('UTF-8')}&response_type=code" target="_blank" style="color:#0e7490; text-decoration:underline;">${tenant.issuer}/password/change/${changePasswordId}?tenantId=${user.tenantId}&client_id=7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742&redirect_uri=${'http://localhost:8080/oidc/return'?url('UTF-8')}&response_type=code</a></p>
+              <p style="margin:6px 0 0 0; font-size:13px; line-height:1.5; word-break:break-all;"><a href="${tenant.issuer}/password/change/${changePasswordId}?tenantId=${user.tenantId}&client_id=7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742&redirect_uri=${(((user.data.url)!'http://localhost:8080') + '/oidc/return')?url('UTF-8')}&response_type=code" target="_blank" style="color:#0e7490; text-decoration:underline;">${tenant.issuer}/password/change/${changePasswordId}?tenantId=${user.tenantId}&client_id=7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742&redirect_uri=${(((user.data.url)!'http://localhost:8080') + '/oidc/return')?url('UTF-8')}&response_type=code</a></p>
             </td>
           </tr>
 

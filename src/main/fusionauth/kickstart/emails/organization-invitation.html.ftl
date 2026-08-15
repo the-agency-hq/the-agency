@@ -29,11 +29,11 @@
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
                 <tr>
                   <td align="center" bgcolor="#0e7490" style="border-radius:8px;">
-                    <a href="http://localhost:8080/" target="_blank" style="display:inline-block; padding:12px 28px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">Accept invitation</a>
+                    <a href="${url!'http://localhost:8080'}/" target="_blank" style="display:inline-block; padding:12px 28px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:8px;">Accept invitation</a>
                   </td>
                 </tr>
               </table>
-              <p style="margin:16px 0 0 0; font-size:13px; line-height:1.5; color:#62748e;">If the button doesn't work, sign in at <a href="http://localhost:8080/" target="_blank" style="color:#0e7490; text-decoration:underline;">http://localhost:8080/</a> to accept.</p>
+              <p style="margin:16px 0 0 0; font-size:13px; line-height:1.5; color:#62748e;">If the button doesn't work, sign in at <a href="${url!'http://localhost:8080'}/" target="_blank" style="color:#0e7490; text-decoration:underline;">${url!'http://localhost:8080'}/</a> to accept.</p>
             </td>
           </tr>
 

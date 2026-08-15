@@ -39,12 +39,29 @@ public class MembershipService {
    */
   private static final UUID INVITE_TEMPLATE_ID = UUID.fromString("2a157fd1-0918-4eca-aa87-8332b9a4bebb");
   private static final System.Logger logger = System.getLogger(MembershipService.class.getName());
+  /**
+   * Where the links inside the invitation and set-password emails send people — the admin UI this instance fronts.
+   * Passed to FusionAuth on every send rather than baked into the templates, so one provisioned template serves
+   * both environments.
+   */
+  private final String baseURL;
   private final DatabaseService database;
   private final FusionAuthClient fusionAuth;
 
   public MembershipService(Configuration config, DatabaseService database) {
     this.database = database;
     this.fusionAuth = new FusionAuthClient(config.get("fusionauth.apiKey"), config.get("fusionauth.baseURL"));
+
+    // A closed set rather than a free-form URL property: the two environments are known, and an unrecognized mode
+    // fails here — at startup, where Services.initialize runs — instead of emailing localhost links from
+    // production.
+    var mode = config.get("runtime.mode");
+    this.baseURL = switch (mode) {
+      case "development" -> "http://localhost:8080";
+      case "production" -> "https://app.theagencyhq.dev";
+      case null, default -> throw new IllegalStateException(
+          "Unknown runtime.mode [" + mode + "]; expected [development] or [production]");
+    };
   }
 
   /**
@@ -145,10 +162,14 @@ public class MembershipService {
     if (lookup == null) {
       userId = UUID.randomUUID();
       invitee = new User(userId, email, null);
+      // The registration API carries no requestData for the set-password email the way the Send API does, so the
+      // URL rides on user.data -- the one channel this call has into the template, which reads it as
+      // ${user.data.url}.
       var registrationRequest = RegistrationRequest.builder()
                                                    .user(org.lattejava.fusionauth.domain.User.builder()
                                                                                              .id(userId)
                                                                                              .email(email)
+                                                                                             .data(Map.of("url", baseURL))
                                                                                              .build())
                                                    .registration(UserRegistration.builder()
                                                                                  .applicationId(APPLICATION_ID)
@@ -169,7 +190,7 @@ public class MembershipService {
                                      .orElse("");
       var sendRequest = SendRequest.builder()
                                    .userIds(List.of(userId))
-                                   .requestData(Map.of("organizationName", organizationName))
+                                   .requestData(Map.of("organizationName", organizationName, "url", baseURL))
                                    .build();
       fusionAuth.sendEmailWithId(INVITE_TEMPLATE_ID, sendRequest);
     }

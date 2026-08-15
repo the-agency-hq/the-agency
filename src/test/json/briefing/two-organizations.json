@@ -1,0 +1,34 @@
+{
+  "organizationIds": [
+    "${firstId}",
+    "${secondId}"
+  ],
+  "briefs": [
+    {
+      "checksum": "${firstChecksum}",
+      "organization": {
+        "id": "${firstId}",
+        "name": "${firstName}",
+        "insertInstant": "2023-11-14T22:13:20Z",
+        "updateInstant": "2023-11-14T22:13:20Z"
+      },
+      "version": 1,
+      "files": [],
+      "sourceCommit": "abc",
+      "insertInstant": "2023-11-14T22:13:20Z"
+    },
+    {
+      "checksum": "${secondChecksum}",
+      "organization": {
+        "id": "${secondId}",
+        "name": "${secondName}",
+        "insertInstant": "2023-11-14T22:13:20Z",
+        "updateInstant": "2023-11-14T22:13:20Z"
+      },
+      "version": 1,
+      "files": [],
+      "sourceCommit": "abc",
+      "insertInstant": "2023-11-14T22:13:20Z"
+    }
+  ]
+}

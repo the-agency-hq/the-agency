@@ -1,0 +1,20 @@
+{
+  "organizationIds": [
+    "${organizationId}"
+  ],
+  "briefs": [
+    {
+      "checksum": "sum-1",
+      "organization": {
+        "id": "${organizationId}",
+        "name": "${organizationName}",
+        "insertInstant": "2023-11-14T22:13:20Z",
+        "updateInstant": "2023-11-14T22:13:20Z"
+      },
+      "version": 1,
+      "files": [],
+      "sourceCommit": "abc",
+      "insertInstant": "2023-11-14T22:13:20Z"
+    }
+  ]
+}

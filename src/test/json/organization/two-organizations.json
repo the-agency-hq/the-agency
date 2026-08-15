@@ -1,0 +1,16 @@
+{
+  "organizations": [
+    {
+      "id": "${alphaId}",
+      "name": "alpha",
+      "insertInstant": "2023-11-14T22:13:20Z",
+      "updateInstant": "2023-11-14T22:13:20Z"
+    },
+    {
+      "id": "${betaId}",
+      "name": "beta",
+      "insertInstant": "2023-11-14T22:13:20Z",
+      "updateInstant": "2023-11-14T22:13:20Z"
+    }
+  ]
+}

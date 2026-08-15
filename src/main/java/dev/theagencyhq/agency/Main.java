@@ -132,6 +132,7 @@ public class Main {
     var github = new GitHubController(cookies);
     var organizations = new OrganizationController(
         "https://github.com/apps/" + config.get("github.appName") + "/installations/new", ssrOIDC, TEMPLATES);
+    var organizationAPI = new OrganizationAPIController(apiOIDC, Services.databaseService());
 
     // addShutdownTask is what makes Services.shutdown() reachable in production at all: Web installs its own JVM
     // shutdown hook, so on SIGTERM this is what closes the HikariCP pool and the poller's scheduler instead of
@@ -157,6 +158,7 @@ public class Main {
        // 401 and never a 400: the server does not parse a body it has no reason to trust.
        .prefix("/api", api ->
            api.install(apiOIDC.authenticated())
+              .get("/v1/organization", organizationAPI::list)
               .post("/v1/briefing", briefing::briefing, BodySupplier.of(BriefingRequestJSON::fromJSON))
        )
        // Installed on the literal /app prefix for the same reason the API's is installed on /api: every page added

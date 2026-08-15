@@ -1,0 +1,41 @@
+{
+  "organizationIds": [
+    "${organizationId}"
+  ],
+  "briefs": [
+    {
+      "checksum": "sum-files",
+      "organization": {
+        "id": "${organizationId}",
+        "name": "${organizationName}",
+        "insertInstant": "2023-11-14T22:13:20Z",
+        "updateInstant": "2023-11-14T22:13:20Z"
+      },
+      "version": 1,
+      "files": [
+        {
+          "path": ".claude/rules/a.md",
+          "encoding": "text",
+          "mode": "r--------",
+          "content": "first",
+          "checksum": "a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e",
+          "missionTypes": [
+            "web"
+          ]
+        },
+        {
+          "path": ".codex/rules/a.md",
+          "encoding": "text",
+          "mode": "r--------",
+          "content": "first",
+          "checksum": "a7937b64b8caa58f03721bb6bacf5c78cb235febe0e70b1b84cd99541461a08e",
+          "missionTypes": [
+            "web"
+          ]
+        }
+      ],
+      "sourceCommit": "abc",
+      "insertInstant": "2023-11-14T22:13:20Z"
+    }
+  ]
+}

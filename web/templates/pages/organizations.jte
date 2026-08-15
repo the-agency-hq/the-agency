@@ -26,6 +26,34 @@
     </div>
   @endif
 
+  <%-- The viewer's pending invitations, ahead of the listing itself: each is the same banner the Organization's
+       own page shows, so accepting or declining works from either place. An invited Organization renders here and
+       never as a table row -- it has no status worth one until the viewer joins. --%>
+  @if(!model.invitations().isEmpty())
+    <section class="mb-6 space-y-3" aria-label="Pending invitations">
+      @for(OrganizationsView.Invitation invitation : model.invitations())
+        <div class="rounded-xl border border-cyan-200 dark:border-accent-500/30 bg-cyan-50 dark:bg-accent-500/10 px-4 py-4" role="status">
+          <div class="flex flex-wrap items-center gap-4">
+            <div class="flex-1 min-w-48">
+              <p class="text-sm font-semibold text-slate-900 dark:text-white">
+                You've been invited to <a class="hover:underline" href="/app/organizations/${invitation.id().toString()}">${invitation.name()}</a>.
+              </p>
+              <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Accept to join as ${invitation.role().label()}.</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <form method="post" action="/app/organizations/${invitation.id().toString()}/members/accept">
+                <button type="submit" class="rounded-lg bg-accent-700 hover:bg-accent-800 dark:bg-accent-500 dark:hover:bg-accent-400 px-4 py-2 text-sm font-semibold text-white dark:text-navy-950 transition-colors">Accept</button>
+              </form>
+              <form method="post" action="/app/organizations/${invitation.id().toString()}/members/decline">
+                <button type="submit" class="rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">Decline</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      @endfor
+    </section>
+  @endif
+
   @if(model.rows().isEmpty())
     <div class="rounded-xl border border-dashed border-slate-300 dark:border-navy-800 px-6 py-16 text-center">
       <p class="text-sm text-slate-500 dark:text-slate-400">No Organizations yet.</p>

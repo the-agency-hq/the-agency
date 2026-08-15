@@ -198,13 +198,17 @@ public class MembershipIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains(ORDINARY_EMAIL).contains("INVITED").contains("Cancel invitation"));
 
-    // The invitee's side.
+    // The invitee's side. The listing leads with the invitation itself -- name, Accept, and Decline -- so joining
+    // does not require finding the Organization's page first.
     ssrOIDC.logout();
     ssrOIDC.login(ORDINARY_EMAIL, TEST_PASSWORD);
     var organization = db.findOrganization(organizationId).orElseThrow();
     test.get("/app/organizations/")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains(organization.name()));
+        .assertBodyAs(string, b -> b.contains(organization.name())
+                                    .contains("You've been invited")
+                                    .contains("/app/organizations/" + organizationId + "/members/accept")
+                                    .contains("/app/organizations/" + organizationId + "/members/decline"));
 
     test.get("/app/organizations/" + organizationId)
         .assertStatus(200)
@@ -396,6 +400,35 @@ public class MembershipIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("cannot remove yourself"));
 
     assertTrue(db.findMember(organization.id(), testUser.userId()).isPresent());
+  }
+
+  /**
+   * The listing splits the viewer's memberships by state: a PENDING invitation renders as a banner above the table
+   * with Accept and Decline, and only ACTIVE memberships render as rows — an Organization the viewer has not
+   * joined yet has no status worth one.
+   */
+  @Test
+  public void theListingLeadsWithPendingInvitationsAndKeepsThemOutOfTheTable() throws Exception {
+    var joined = insertOrganization("members-listing-joined-" + UUID.randomUUID());
+    insertMember(joined, ordinaryUser, Role.CONTRIBUTOR, MembershipState.ACTIVE);
+    var invited = insertOrganization("members-listing-invited-" + UUID.randomUUID());
+    insertMember(invited, ordinaryUser, Role.OWNER, MembershipState.PENDING);
+
+    ssrOIDC.login(ORDINARY_EMAIL, TEST_PASSWORD);
+    test.get("/app/organizations/")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b
+            // The invitation banner, carrying the role accepting would grant and both controls.
+            .contains("You've been invited")
+            .contains(invited.name())
+            .contains("Accept to join as Owner.")
+            .contains("/app/organizations/" + invited.id() + "/members/accept")
+            .contains("/app/organizations/" + invited.id() + "/members/decline")
+            // The joined Organization is a table row, not a banner: no Accept for it.
+            .contains(joined.name())
+            .doesNotContain("/app/organizations/" + joined.id() + "/members/accept")
+            // And the invited one is not a row: an unconnected row's repository cell would carry this link.
+            .doesNotContain("/app/organizations/" + invited.id() + "/connect"));
   }
 
   /**

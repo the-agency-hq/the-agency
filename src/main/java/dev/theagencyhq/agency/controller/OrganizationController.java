@@ -17,6 +17,7 @@ import dev.theagencyhq.agency.model.github.GitHubRepository;
 import dev.theagencyhq.agency.model.BriefFile;
 import dev.theagencyhq.agency.model.BriefSource;
 import dev.theagencyhq.agency.model.Member;
+import dev.theagencyhq.agency.model.MembershipState;
 import dev.theagencyhq.agency.model.Organization;
 import dev.theagencyhq.agency.model.User;
 import dev.theagencyhq.agency.model.view.BriefFileView;
@@ -234,10 +235,25 @@ public class OrganizationController {
     var latestVersions = database.latestBriefVersions();
 
     // The viewer's Organizations, not all of them: membership is what makes one visible here. PENDING rows are
-    // deliberately included, because this listing is how an invited user finds the Organization to accept.
-    var rows = database.listOrganizationsForUser(oidc.user().userId()).stream().map(o -> {
+    // deliberately included, because this listing is how an invited user finds the Organization to accept -- but
+    // they render as invitations above the listing, with Accept and Decline, rather than as rows in it. An
+    // Organization the viewer has not joined yet has no status worth a table row.
+    var userId = oidc.user().userId();
+    var membershipsByOrganization = database.listMembersForUser(userId)
+                                            .stream()
+                                            .collect(Collectors.toMap(Member::organizationId, m -> m));
+
+    var invitations = new ArrayList<OrganizationsView.Invitation>();
+    var rows = new ArrayList<OrganizationsView.Row>();
+    for (var o : database.listOrganizationsForUser(userId)) {
+      var membership = membershipsByOrganization.get(o.id());
+      if (membership.state() == MembershipState.PENDING) {
+        invitations.add(new OrganizationsView.Invitation(o.id(), o.name(), membership.role()));
+        continue;
+      }
+
       var source = sourcesByOrganization.get(o.id());
-      return new OrganizationsView.Row(
+      rows.add(new OrganizationsView.Row(
           o.id(),
           o.name(),
           source == null ? "" : source.fullName(),
@@ -245,10 +261,11 @@ public class OrganizationController {
           source == null ? null : source.lastStatus(),
           source == null ? null : source.lastError(),
           latestVersions.get(o.id()),
-          source == null ? null : source.lastPolledInstant());
-    }).toList();
+          source == null ? null : source.lastPolledInstant()));
+    }
 
-    render("pages/organizations.jte", req, res, new OrganizationsView(req.getParameter("status"), rows));
+    render("pages/organizations.jte", req, res,
+        new OrganizationsView(req.getParameter("status"), invitations, rows));
   }
 
   public void newForm(HTTPRequest req, HTTPResponse res) throws IOException {

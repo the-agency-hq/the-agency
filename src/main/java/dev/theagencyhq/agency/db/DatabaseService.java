@@ -469,6 +469,17 @@ public class DatabaseService {
               .fetch(DatabaseService::toMember);
   }
 
+  /**
+   * @param userId The user.
+   * @return Every membership row the user holds, across all Organizations and in both states — the listing page
+   *     reads it to split pending invitations from the Organizations the user is a member of.
+   */
+  public List<Member> listMembersForUser(UUID userId) {
+    return dsl.selectFrom(MEMBERS)
+              .where(MEMBERS.USER_ID.eq(userId))
+              .fetch(DatabaseService::toMember);
+  }
+
   public List<Organization> listOrganizations() {
     return dsl.selectFrom(ORGANIZATIONS).orderBy(ORGANIZATIONS.NAME).fetch(DatabaseService::toOrganization);
   }

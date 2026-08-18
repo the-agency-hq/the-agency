@@ -1,0 +1,10 @@
+# `railway up` uploads the working directory, and `latte deploy` runs it with --no-gitignore
+# because the bundle lives under the gitignored build/ directory. This file (gitignore syntax)
+# keeps that upload to exactly what the Dockerfile build needs: the bundle, the Dockerfile,
+# and the service's config-as-code.
+/*
+!/build
+/build/*
+!/build/bundle
+!/Dockerfile
+!/railway.json

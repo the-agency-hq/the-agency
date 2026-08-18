@@ -47,6 +47,15 @@ services:
       FUSIONAUTH_APP_THEME_APP_URL: ${FUSIONAUTH_APP_THEME_APP_URL}
       FUSIONAUTH_APP_THEME_CSS_URL: ${FUSIONAUTH_APP_THEME_CSS_URL}
       FUSIONAUTH_APP_URL: http://fusionauth:9011
+      # Kickstart inputs (see kickstart/kickstart.json). Production (Railway) supplies its own values; these
+      # defaults are the values that used to be hardcoded in the kickstart, so local provisioning is unchanged
+      # and existing .env files need nothing added.
+      KICKSTART_ADMIN_PASSWORD: ${KICKSTART_ADMIN_PASSWORD:-password}
+      KICKSTART_AGENCY_CLIENT_SECRET: ${KICKSTART_AGENCY_CLIENT_SECRET:-super-secret-secret-that-should-be-regenerated-for-production}
+      KICKSTART_API_KEY: ${KICKSTART_API_KEY:-33052c8a-c283-4e96-9d2a-eb1215c69f8f-not-for-prod}
+      KICKSTART_HANDLER_CLIENT_SECRET: ${KICKSTART_HANDLER_CLIENT_SECRET:-super-secret-secret-that-should-be-regenerated-for-production}
+      KICKSTART_ORDINARY_PASSWORD: ${KICKSTART_ORDINARY_PASSWORD:-password}
+      KICKSTART_TENANT_ISSUER: ${KICKSTART_TENANT_ISSUER:-http://localhost:9016}
       SEARCH_SERVERS: http://search:9200
       SEARCH_TYPE: ${FUSIONAUTH_SEARCH_TYPE}
       FUSIONAUTH_APP_INSTALLATION_SOURCE: fusionauth-containers

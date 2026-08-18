@@ -111,8 +111,18 @@ network are needed. The GitHub credentials they store are written to the real lo
 
     latte test
 
+## Deploying
+
+Production runs on Railway: the app at `https://app.theagencyhq.dev`, FusionAuth at `https://auth.theagencyhq.dev`,
+and a Railway PostgreSQL for each. The build happens on the developer machine — `latte deploy` assembles a
+self-contained runtime bundle (`latte bundle` → `build/bundle`) and ships it with `railway up`; Railway builds the
+runtime-only `Dockerfile` from the upload. FusionAuth deploys from this repo too (`src/main/fusionauth/Dockerfile`
+bakes the kickstart into the image), and all production configuration is Railway variables. The topology, variable
+tables, and first-deploy runbook are in `docs/design/2026-08-18-railway-deploy-design.md`.
+
 ## Design documents
 
 - `docs/design/2026-07-30-brief-pipeline-design.md` — the Brief pipeline and the Briefing API (milestone 1)
 - `docs/design/2026-08-06-oauth-authentication-design.md` — OAuth authentication for the Briefing API
 - `docs/design/2026-08-08-github-brief-sources-design.md` — Brief sources on GitHub, replacing local work trees
+- `docs/design/2026-08-18-railway-deploy-design.md` — the Railway deployment

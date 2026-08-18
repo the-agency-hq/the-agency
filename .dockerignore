@@ -1,0 +1,7 @@
+# Keep the build context tiny: the image only needs the runnable bundle in build/bundle.
+# Ignore everything, then re-include build/bundle (sources, node_modules, .git, and the rest
+# of build/ are irrelevant to the runtime image).
+*
+!build
+build/*
+!build/bundle

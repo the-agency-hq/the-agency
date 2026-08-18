@@ -2,20 +2,20 @@
   "licenseId": "#{ENV.FUSIONAUTH_APP_LICENSE_KEY}",
   "variables": {
     "adminEmail": "admin@theagencyhq.dev",
-    "adminPassword": "password",
+    "adminPassword": "#{ENV.KICKSTART_ADMIN_PASSWORD}",
     "adminUserId": "8ff736db-55a4-4360-aac8-d714624d788c",
     "agencyApplicationId": "7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742",
-    "agencyClientSecret": "super-secret-secret-that-should-be-regenerated-for-production",
-    "apiKey": "33052c8a-c283-4e96-9d2a-eb1215c69f8f-not-for-prod",
+    "agencyClientSecret": "#{ENV.KICKSTART_AGENCY_CLIENT_SECRET}",
+    "apiKey": "#{ENV.KICKSTART_API_KEY}",
     "asymmetricKeyId": "#{UUID()}",
     "defaultTenantId": "d7d09513-a3f5-401c-9685-34ab6c552453",
     "handlerApplicationId": "fa83bc7c-f1c5-48af-8ecb-6c09cf766d73",
-    "handlerClientSecret": "super-secret-secret-that-should-be-regenerated-for-production",
+    "handlerClientSecret": "#{ENV.KICKSTART_HANDLER_CLIENT_SECRET}",
     "accessTokenPopulateLambdaId": "#{UUID()}",
     "inviteEmailTemplateId": "2a157fd1-0918-4eca-aa87-8332b9a4bebb",
     "setPasswordEmailTemplateId": "fc6283a9-ed8e-41f1-88f8-083373bea708",
     "ordinaryEmail": "user@theagencyhq.dev",
-    "ordinaryPassword": "password",
+    "ordinaryPassword": "#{ENV.KICKSTART_ORDINARY_PASSWORD}",
     "ordinaryUserId": "3383ed14-76f3-4325-87f4-6f4422b3e007",
     "selfServiceEmailFieldId": "#{UUID()}",
     "selfServiceFormId": "#{UUID()}",
@@ -141,7 +141,7 @@
       "url": "/api/tenant/#{defaultTenantId}",
       "body": {
         "tenant": {
-          "issuer": "http://localhost:9016",
+          "issuer": "#{ENV.KICKSTART_TENANT_ISSUER}",
           "emailConfiguration": {
             "host": "mailcatcher",
             "port": 1025,
@@ -204,12 +204,12 @@
           "name": "The Agency",
           "oauthConfiguration": {
             "authorizedRedirectURLs": [
-              "http://localhost:8080/oidc/logout-return",
-              "http://localhost:8080/oidc/return",
+              "#{ENV.FUSIONAUTH_APP_THEME_APP_URL}/oidc/logout-return",
+              "#{ENV.FUSIONAUTH_APP_THEME_APP_URL}/oidc/return",
               "http://localhost:8081/oidc/logout-return",
               "http://localhost:8081/oidc/return"
             ],
-            "logoutURL": "http://localhost:8080/oidc/logout-return",
+            "logoutURL": "#{ENV.FUSIONAUTH_APP_THEME_APP_URL}/oidc/logout-return",
             "clientSecret": "#{agencyClientSecret}",
             "enabledGrants": [
               "authorization_code",

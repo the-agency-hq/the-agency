@@ -100,6 +100,31 @@ target(name: "run", description: "Compiles the Tailwind CSS and runs the web ser
   java.run(main: "dev.theagencyhq.agency.Main")
 }
 
+target(name: "bundle", description: "Builds a runnable bundle into `build/bundle`", dependsOn: ["build"]) {
+  file.copy(to: "build/bundle/web") {
+    fileSet(dir: "web", includePatterns: [/.*/])
+  }
+
+  file.copy(to: "build/bundle/lib") {
+    fileSet(dir: "build/jars", includePatterns: [/the-agency-${project.version}.jar/])
+  }
+
+  file.copy(to: "build/bundle") {
+    fileSet(dir: "src/main/scripts", includePatterns: [/app.sh/])
+  }
+
+  dependency.copy(to: "build/bundle/lib") {
+    dependencies(group: "compile", transitive: true, fetchSource: false, transitiveGroups: ["compile", "runtime"])
+    dependencies(group: "runtime", transitive: true, fetchSource: false, transitiveGroups: ["compile", "runtime"])
+  }
+}
+
+target(name: "deploy", description: "Builds the bundle and deploys the app to Railway", dependsOn: ["bundle"]) {
+  // --no-gitignore because the bundle lives under the gitignored build/ directory; .railwayignore keeps the
+  // upload to exactly what the Dockerfile needs. --ci streams the build logs and exits when the build finishes.
+  file.execute(cmd: "railway up --no-gitignore --ci")
+}
+
 target(name: "main-database", description: "Creates/recreates the main database. The app applies the SQL migrations on startup.") {
   database.createMainDatabase()
 }

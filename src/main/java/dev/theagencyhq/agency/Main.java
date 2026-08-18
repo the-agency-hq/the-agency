@@ -40,8 +40,13 @@ public class Main {
   private final OIDC<User> apiOIDC;
   private final OIDC<User> ssrOIDC;
 
+  /**
+   * The production entry point's constructor: the port comes from the {@code PORT} environment variable when the
+   * platform assigns one (an env-and-system-property-only lookup, since the instance's layered Configuration cannot
+   * exist before the instance), falling back to {@link #PORT}.
+   */
   public Main() {
-    this(PORT, false, null);
+    this(new Configuration().getInteger("PORT", PORT), false, null);
   }
 
   /**
@@ -107,6 +112,22 @@ public class Main {
   }
 
   /**
+   * Answers a deployment platform's healthcheck with a plain 200. Deliberately checks nothing: a Main that
+   * constructed at all has already proven the database (migrations applied) and FusionAuth (Discovery and the JWKS
+   * fetch), so a listening server is the health being asserted. Static for the same reason as {@link #missing} — it
+   * lives outside both authentication prefixes and needs nothing from an instance.
+   *
+   * @param req The request.
+   * @param res The response.
+   * @throws IOException If the response cannot be written.
+   */
+  public static void health(HTTPRequest req, HTTPResponse res) throws IOException {
+    res.setStatus(200);
+    res.setHeader("Content-Type", "text/plain");
+    res.getWriter().write("OK");
+  }
+
+  /**
    * Renders the admin UI's not-found page with a 404 status. One method for both kinds of miss: Web invokes it for a
    * path that matches no route, and the browser-facing controllers call it for a path whose Organization, version, or
    * file does not exist. Static because the unmatched-path case also fires outside the authenticated {@code /app}
@@ -168,6 +189,9 @@ public class Main {
        // satisfy. Everything else falls through to the routes below.
        .install(OIDC.sessionEndpoints(ssrConfig, ssrSettings))
        .get("/", (_, res) -> res.sendRedirect("/app/organizations/", 303))
+       // Outside both authentication prefixes, because Railway's healthcheck gates every deploy on a plain 200 --
+       // the root route's 303 reads as a failure to it.
+       .get("/health", Main::health)
 
        // The authentication middleware is installed on the /api prefix rather than per route, so every API route
        // added later is authenticated by construction -- there is no per-route opt-in to forget. Web runs prefix
@@ -234,11 +258,19 @@ public class Main {
                 );
            }
        )
-       // Loopback explicitly, NOT Web.start(int), whose default listener binds every interface. Authentication is
-       // no longer what keeps this here -- both /app and /api require a FusionAuth token now -- but the transport
-       // is: there is no TLS listener, and Cookies marks the session cookies Secure only on an https request
-       // (Cookies#isSecureScheme). Off the loopback interface, over plain http, every admin session cookie would
-       // travel in the clear. The bind widens when there is a TLS listener to widen it onto.
-       .start(new HTTPListenerConfiguration(InetAddress.getLoopbackAddress(), port));
+       // Loopback explicitly outside production, NOT Web.start(int), whose default listener binds every interface.
+       // Authentication is no longer what keeps this here -- both /app and /api require a FusionAuth token now --
+       // but the transport is: there is no local TLS listener, and Cookies marks the session cookies Secure only on
+       // an https request (Cookies#isSecureScheme). Off the loopback interface, over plain http, every admin
+       // session cookie would travel in the clear.
+       //
+       // Production (Railway) is the TLS listener that bind was waiting on: the edge terminates TLS and proxies
+       // over the project's private network carrying X-Forwarded-Proto, which the request scheme honors -- so the
+       // cookies are Secure there, and the bind widens to every interface because the proxy's connections must be
+       // accepted. runtime.mode is required configuration with a closed value set (MembershipService rejects
+       // anything but development/production at startup), so a typo cannot silently open the wide bind.
+       .start("production".equals(config.get("runtime.mode"))
+           ? new HTTPListenerConfiguration(port)
+           : new HTTPListenerConfiguration(InetAddress.getLoopbackAddress(), port));
   }
 }

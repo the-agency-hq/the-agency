@@ -18,6 +18,8 @@ Tailwind CSS, FusionAuth for all authentication.
 | `latte test --test=<Name>` | Run one test class — simple name, fully-qualified name, or substring match      |
 | `latte test --onlyFailed`  | Re-run only the tests that failed last run                                      |
 | `latte run`                | Build and start the server on http://localhost:8080                             |
+| `latte bundle`             | Build a self-contained runtime bundle into `build/bundle`                       |
+| `latte deploy`             | Bundle and deploy to Railway via `railway up` (needs a linked Railway project)   |
 | `latte codegen`            | Regenerate jOOQ classes from the migrations (uses a scratch `agency_schema` DB) |
 | `latte main-database`      | Create/recreate the main database                                               |
 | `latte tailwind`           | Tailwind in watch mode                                                          |
@@ -43,7 +45,9 @@ there, in dependency order, and `Services.shutdown()` is idempotent because it r
 Handler daemons) validate JWTs against the Handler Application; routes under `/app` (the admin UI) use a browser
 session against The Agency Application. The audience (`aud`) check is the boundary — a Handler token cannot open
 the admin UI and vice versa. Middleware is installed on the `/api` and `/app` prefixes, so new routes are
-authenticated by construction. The server binds loopback only (no TLS listener).
+authenticated by construction. The server binds loopback in development (there is no local TLS listener);
+`runtime.mode=production` binds every interface behind Railway's TLS-terminating edge
+(`docs/design/2026-08-18-railway-deploy-design.md`).
 
 **Memberships are the authorization.** The `members` table (Organization × FusionAuth user id, role
 OWNER/CONTRIBUTOR, state ACTIVE/PENDING) gates everything: `OrganizationSecurity` on the `/app/organizations`

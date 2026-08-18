@@ -38,8 +38,14 @@ services:
       DATABASE_USERNAME: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       FUSIONAUTH_APP_KICKSTART_FILE: ${FUSIONAUTH_APP_KICKSTART_FILE}
+      FUSIONAUTH_APP_LICENSE_KEY: ${FUSIONAUTH_APP_LICENSE_KEY}
       FUSIONAUTH_APP_MEMORY: ${FUSIONAUTH_APP_MEMORY}
       FUSIONAUTH_APP_RUNTIME_MODE: ${FUSIONAUTH_APP_RUNTIME_MODE}
+      # Where the theme's pages load the admin UI's stylesheet from, and where its links back to the admin UI
+      # point. The kickstart bakes both into the theme, so changing either needs a re-provision
+      # (docker compose down -v). Production provides its own values.
+      FUSIONAUTH_APP_THEME_APP_URL: ${FUSIONAUTH_APP_THEME_APP_URL}
+      FUSIONAUTH_APP_THEME_CSS_URL: ${FUSIONAUTH_APP_THEME_CSS_URL}
       FUSIONAUTH_APP_URL: http://fusionauth:9011
       SEARCH_SERVERS: http://search:9200
       SEARCH_TYPE: ${FUSIONAUTH_SEARCH_TYPE}

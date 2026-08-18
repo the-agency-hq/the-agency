@@ -432,8 +432,8 @@ public class MembershipIntegrationTest extends BaseTest {
   }
 
   /**
-   * The members page itself, as the Owner sees it: both members enriched with their FusionAuth identities — email
-   * and username, from one search over all their ids — and the viewer's own row without self-service controls.
+   * The members page itself, as the Owner sees it: both members enriched with their FusionAuth identity — the
+   * email, from one search over all their ids — and the viewer's own row without self-service controls.
    */
   @Test
   public void theMembersPageListsEveryMemberWithTheirIdentity() throws Exception {
@@ -444,9 +444,7 @@ public class MembershipIntegrationTest extends BaseTest {
     test.get("/app/organizations/" + organization.id() + "/members/")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains(TEST_EMAIL)
-                                    .contains("AdminUser")
                                     .contains(ORDINARY_EMAIL)
-                                    .contains("OrdinaryUser")
                                     .contains("/members/invite")
                                     // The one Remove link is the other member's; the viewer cannot remove
                                     // themselves.

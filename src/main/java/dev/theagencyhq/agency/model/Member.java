@@ -8,7 +8,7 @@ import module java.base;
 
 /**
  * A membership: one user's row in one Organization. The {@code user} carries the FusionAuth user UUID always, and
- * email/username only after enrichment from FusionAuth — the database stores nothing but the UUID, so a Member read
+ * the email only after enrichment from FusionAuth — the database stores nothing but the UUID, so a Member read
  * straight off a row has a {@link User} whose display fields are {@code null}.
  *
  * @param organizationId The Organization the membership belongs to.
@@ -37,11 +37,11 @@ public record Member(
 
   /**
    * Convenience constructor for callers that only have the user's UUID (the database read path and tests). The
-   * email and username stay {@code null} until the member is enriched from FusionAuth.
+   * email stays {@code null} until the member is enriched from FusionAuth.
    */
   public Member(UUID organizationId, UUID userId, Role role, MembershipState state, UUID invitedBy,
                 Instant invitedAt, Instant joinedAt) {
-    this(organizationId, new User(userId, null, null), role, state, invitedBy, invitedAt, joinedAt);
+    this(organizationId, new User(userId, null), role, state, invitedBy, invitedAt, joinedAt);
   }
 
   /**

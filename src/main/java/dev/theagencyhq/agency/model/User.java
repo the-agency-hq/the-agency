@@ -12,14 +12,13 @@ import module java.base;
  * token that carried it.
  *
  * <p>{@code userId} is the only member anything should key on. It is FusionAuth's user id, which is stable across
- * an email or username change, and it is what the Organization memberships will hang off when entitlements arrive
- * (2026-07-30 design §10.4). {@code email} and {@code username} are display text.
+ * an email change, and it is what the Organization memberships will hang off when entitlements arrive
+ * (2026-07-30 design §10.4). {@code email} is display text.
  *
- * @param userId   The FusionAuth user id, from the {@code sub} claim.
- * @param email    The user's email address, from the {@code email} claim.
- * @param username The FusionAuth username, from the {@code preferred_username} claim. Null when the provider omits
- *                 it — both claims are populated by the JWT-populate lambda in {@code src/main/fusionauth}, not by
- *                 FusionAuth's defaults, so a provider configured without it still authenticates.
+ * @param userId The FusionAuth user id, from the {@code sub} claim.
+ * @param email  The user's email address, from the {@code email} claim. Null when the provider omits it — the claim
+ *               is populated by the JWT-populate lambda in {@code src/main/fusionauth}, not by FusionAuth's
+ *               defaults, so a provider configured without it still authenticates.
  */
-public record User(UUID userId, String email, String username) {
+public record User(UUID userId, String email) {
 }

@@ -32,7 +32,7 @@ public class UserService {
       throw new IllegalStateException("The access token carries no [sub] claim, so the caller cannot be identified");
     }
 
-    return new User(UUID.fromString(subject), jwt.getString("email"), jwt.getString("preferred_username"));
+    return new User(UUID.fromString(subject), jwt.getString("email"));
   }
 
   /**
@@ -43,6 +43,6 @@ public class UserService {
    * @return The user.
    */
   public static User toUser(org.lattejava.fusionauth.domain.User fusionAuthUser) {
-    return new User(fusionAuthUser.id(), fusionAuthUser.email(), fusionAuthUser.username());
+    return new User(fusionAuthUser.id(), fusionAuthUser.email());
   }
 }

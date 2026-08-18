@@ -19,8 +19,8 @@ import static org.testng.Assert.*;
  * return a {@code 200} unless this translator ran.
  *
  * <p>The claims are asserted by name because those names are a contract with FusionAuth's JWT-populate lambda in
- * {@code src/main/fusionauth/kickstart}: {@code email} and {@code preferred_username} are in an access token only
- * because that lambda puts them there. Renaming one on either side has to fail here.
+ * {@code src/main/fusionauth/kickstart}: {@code email} is in an access token only because that lambda puts it
+ * there. Renaming it on either side has to fail here.
  */
 @Test
 public class UserServiceTest {
@@ -31,10 +31,9 @@ public class UserServiceTest {
     var user = UserService.toUser(JWT.builder()
                                      .subject(USER_ID.toString())
                                      .claim("email", "admin@theagencyhq.dev")
-                                     .claim("preferred_username", "AdminUser")
                                      .build());
 
-    assertEquals(user, new User(USER_ID, "admin@theagencyhq.dev", "AdminUser"));
+    assertEquals(user, new User(USER_ID, "admin@theagencyhq.dev"));
   }
 
   /**
@@ -46,7 +45,7 @@ public class UserServiceTest {
   public void missingOptionalClaimsAreNull() {
     var user = UserService.toUser(JWT.builder().subject(USER_ID.toString()).build());
 
-    assertEquals(user, new User(USER_ID, null, null));
+    assertEquals(user, new User(USER_ID, null));
   }
 
   /**

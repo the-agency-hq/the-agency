@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @source "../../../web/**/*.jte";
+/* The FusionAuth theme's templates load this same stylesheet, so the classes they use have to be compiled into
+   it too. */
+@source "../fusionauth/kickstart/theme/**/*.ftl";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

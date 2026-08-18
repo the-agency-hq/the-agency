@@ -110,7 +110,7 @@ public class MembershipService {
 
   /**
    * Like {@link #findMember}, but with the returned {@link Member#user()} enriched from FusionAuth so callers that
-   * need email or username — the role and remove confirmation pages — get one row read plus one FusionAuth lookup
+   * need the email — the role and remove confirmation pages — get one row read plus one FusionAuth lookup
    * rather than re-fetching every member of the Organization through {@link #listMembers}.
    *
    * @param organizationId The Organization.
@@ -161,7 +161,7 @@ public class MembershipService {
     User invitee;
     if (lookup == null) {
       userId = UUID.randomUUID();
-      invitee = new User(userId, email, null);
+      invitee = new User(userId, email);
       // The registration API carries no requestData for the set-password email the way the Send API does, so the
       // URL rides on user.data -- the one channel this call has into the template, which reads it as
       // ${user.data.url}.
@@ -212,7 +212,7 @@ public class MembershipService {
   }
 
   /**
-   * Every member of an Organization, each enriched with email and username from one FusionAuth search over all
+   * Every member of an Organization, each enriched with their email from one FusionAuth search over all
    * their ids. A member FusionAuth has no user for renders with what the row holds — the UUID — rather than
    * failing the whole page.
    *

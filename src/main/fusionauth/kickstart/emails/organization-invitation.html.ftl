@@ -24,7 +24,7 @@
 
           <tr>
             <td style="background-color:#ffffff; border-left:1px solid #e2e8f0; border-right:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; border-bottom-left-radius:8px; border-bottom-right-radius:8px; padding:12px 32px 36px 32px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#0f172b; font-size:16px; line-height:1.6;">
-              <p style="margin:0 0 16px 0;">Hi ${(user.username)!'there'},</p>
+              <p style="margin:0 0 16px 0;">Hi there,</p>
               <p style="margin:0 0 16px 0;">You've been invited to join the Organization <strong style="color:#0f172b;">${organizationName!''}</strong> on The Agency.</p>
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
                 <tr>

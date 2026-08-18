@@ -146,10 +146,16 @@ public class Main {
     // shutdown hook, so on SIGTERM this is what closes the HikariCP pool and the poller's scheduler instead of
     // abandoning them, possibly mid-insertBrief. Main.close() (which only tests call) also invokes it directly;
     // Services.shutdown() is idempotent and thread-safe precisely so both paths are harmless.
-    web.install(SecurityHeaders.defaults())
-       .addShutdownTask(Services::shutdown)
+    web.addShutdownTask(Services::shutdown)
        .baseDir(BASE_DIR)
+       // The static resources are used cross-origin: the FusionAuth theme -- a different origin -- links the
+       // admin UI's stylesheet, and the browser refuses that under the default same-origin
+       // Cross-Origin-Resource-Policy. Installed before files() so the relaxed headers are what a served asset
+       // carries, exactly as latte-java/app does it; everything after the file handler still gets the defaults
+       // below.
+       .install(new FilteredMiddleware("/static", SecurityHeaders.empty().crossOriginResourcePolicy("cross-origin")))
        .files("/static")
+       .install(SecurityHeaders.defaults())
        // An unmatched path renders the same styled 404 the controllers use, rather than the empty-body default
        // that a browser turns into its own error page or a blank one.
        .missingHandler(Main::missing)
@@ -174,6 +180,13 @@ public class Main {
        // browser is sent to /login, and the callback returns it to the page it asked for.
        .prefix("/app", app -> {
              app.install(ssrOIDC.authenticated())
+                // The nav's Account link. A redirect rather than a templated URL so the FusionAuth origin and
+                // client id stay in configuration instead of being threaded through every page render. FusionAuth
+                // hosts the account pages; its SSO session (established at login) signs the user straight in. The
+                // trailing slash matters: FusionAuth serves account management at /account/ and bounces /account
+                // to its root landing page instead.
+                .get("/account", (_, res) -> res.sendRedirect(
+                    config.get("fusionauth.baseURL") + "/account/?client_id=" + config.get("fusionauth.clientId"), 303))
                 // Inside the gate, deliberately. Granting an Organization a GitHub credential is an operator
                 // action, so an unauthenticated visitor must never be able to start a connection or land a
                 // callback that stores one.

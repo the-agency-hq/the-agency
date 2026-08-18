@@ -68,8 +68,8 @@ public class BriefingController {
     res.setContentLength(bytes.length);
     res.getOutputStream().write(bytes);
 
-    // The user id, not the email or username: it is the member the entitled set will eventually be derived from
-    // (design §10.4), it is stable across a profile change, and it is the least revealing of the three. The access
+    // The user id, not the email: it is the member the entitled set will eventually be derived from
+    // (design §10.4), it is stable across a profile change, and it is the less revealing of the two. The access
     // token it all came from is never logged, at any level.
     logger.log(System.Logger.Level.DEBUG, "Briefing response for user [{0}] with [{1}] Briefs", user.userId(),
         updated.briefs().size());

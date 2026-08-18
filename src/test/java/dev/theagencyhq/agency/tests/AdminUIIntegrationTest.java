@@ -21,6 +21,17 @@ import static org.testng.Assert.assertTrue;
 public class AdminUIIntegrationTest extends BaseTest {
   public StringBodyAsserter string = new StringBodyAsserter();
 
+  /**
+   * The nav's Account link lands on FusionAuth's hosted account pages: the app route is a redirect built from
+   * configuration, so the FusionAuth origin and client id never appear in a template. The trailing slash in the
+   * Location is part of the contract — FusionAuth bounces the slashless /account to its root landing page.
+   */
+  @Test
+  public void accountRedirectsToTheFusionAuthAccountPage() {
+    test.get("/app/account")
+        .assertRedirect(303, "http://localhost:9016/account/?client_id=" + main.ssrConfig.clientId());
+  }
+
   @Test
   public void binaryFileRendersSizeAndDownloadsRawBytes() {
     // 0xFF is never a valid UTF-8 leading byte, so BriefBuilder's strict decoder falls back to base64 -- this

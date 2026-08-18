@@ -42,9 +42,6 @@
             <%-- The email is the identity an Owner recognizes; a member FusionAuth has no user for falls back to
                  the UUID rather than a blank cell. --%>
             <div class="font-medium text-slate-900 dark:text-white break-all">${m.user().email() != null ? m.user().email() : m.userId().toString()}</div>
-            @if(m.user().username() != null)
-              <div class="text-xs text-slate-500 dark:text-slate-400">${m.user().username()}</div>
-            @endif
           </td>
           <td class="px-4 py-3">
             @if(pending)

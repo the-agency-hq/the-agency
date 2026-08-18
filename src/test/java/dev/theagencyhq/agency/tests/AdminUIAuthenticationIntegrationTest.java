@@ -144,7 +144,7 @@ public class AdminUIAuthenticationIntegrationTest extends BaseTest {
 
   /**
    * The signed-in chrome, which is the only place the translated {@link dev.theagencyhq.agency.model.User} is
-   * visible from outside the server. Asserting the username here is what ties the layout, the {@code viewer}
+   * visible from outside the server. Asserting the email here is what ties the layout, the {@code viewer}
    * template parameter, and {@code UserService}'s claim mapping together end to end.
    */
   @Test
@@ -153,8 +153,7 @@ public class AdminUIAuthenticationIntegrationTest extends BaseTest {
 
     test.get("/app/organizations/")
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("AdminUser")
-                                    .contains(TEST_EMAIL)
+        .assertBodyAs(string, b -> b.contains(TEST_EMAIL)
                                     .contains("action=\"/logout\""));
   }
 }

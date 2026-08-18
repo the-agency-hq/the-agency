@@ -1,4 +1,5 @@
 {
+  "licenseId": "#{ENV.FUSIONAUTH_APP_LICENSE_KEY}",
   "variables": {
     "adminEmail": "admin@theagencyhq.dev",
     "adminPassword": "password",
@@ -15,7 +16,10 @@
     "setPasswordEmailTemplateId": "fc6283a9-ed8e-41f1-88f8-083373bea708",
     "ordinaryEmail": "user@theagencyhq.dev",
     "ordinaryPassword": "password",
-    "ordinaryUserId": "#{UUID()}"
+    "ordinaryUserId": "#{UUID()}",
+    "selfServiceEmailFieldId": "#{UUID()}",
+    "selfServiceFormId": "#{UUID()}",
+    "themeId": "d5bfbc90-d241-4ea7-ae89-cec6c2b2d132"
   },
   "apiKeys": [
     {
@@ -64,6 +68,75 @@
       }
     },
     {
+      "method": "POST",
+      "url": "/api/theme/#{themeId}",
+      "body": {
+        "theme": {
+          "name": "The Agency",
+          "data": {
+            "appURL": "#{ENV.FUSIONAUTH_APP_THEME_APP_URL}",
+            "cssURL": "#{ENV.FUSIONAUTH_APP_THEME_CSS_URL}"
+          },
+          "stylesheet": "/* The Agency palette, light. Every variable here is one the hosted stylesheet's semantic tokens fall back to,\n   and the var(--color-*) references resolve against the app stylesheet imported above, so the auth pages follow\n   the app's palette rather than carrying a copy of it. */\n:root {\n  --normal-font: ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\";\n  --rounded: 8px;\n  --page-background: #ffffff;\n  --panel-background: #ffffff;\n  --color-panel-border: var(--color-slate-200, #e2e8f0);\n  --font-color: var(--color-slate-900, #0f172b);\n  --mono-font-color: var(--color-slate-700, #334155);\n  --primary-button: var(--color-accent-700, #0e7490);\n  --primary-button-focus: var(--color-accent-800, #155e75);\n  --primary-button-text: #ffffff;\n  --primary-button-text-focus: #ffffff;\n  --link-color: var(--color-accent-700, #0e7490);\n  --link-color-focus: var(--color-accent-800, #155e75);\n  --input-background: #ffffff;\n  --input-text: var(--color-slate-900, #0f172b);\n  --alert-background: #ffffff;\n  --alert-font: var(--color-slate-900, #0f172b);\n  --delete-button: var(--color-red-700, #b91c1c);\n  --delete-button-focus: var(--color-red-800, #991b1b);\n  --delete-button-text: #ffffff;\n  --delete-button-text-focus: #ffffff;\n  --error-font: var(--color-red-700, #b91c1c);\n  --error-icon-color: var(--color-red-600, #dc2626);\n  --info-icon-color: var(--color-accent-400, #22d3ee);\n}\n\n/* Dark: the admin UI's dim-operations-room navy. The .dark class is toggled on <html> by the script in the\n   helpers head, exactly as the admin UI's theme.js does. */\n.dark {\n  --page-background: var(--color-navy-950, #011327);\n  --panel-background: var(--color-navy-900, #041c33);\n  --color-panel-border: var(--color-navy-800, #0a2540);\n  --font-color: var(--color-slate-100, #f1f5f9);\n  --mono-font-color: var(--color-slate-300, #cbd5e1);\n  --primary-button: var(--color-accent-500, #06b6d4);\n  --primary-button-focus: var(--color-accent-400, #22d3ee);\n  --primary-button-text: var(--color-navy-950, #011327);\n  --primary-button-text-focus: var(--color-navy-950, #011327);\n  --link-color: var(--color-accent-400, #22d3ee);\n  --link-color-focus: var(--color-accent-300, #67e8f9);\n  --input-background: var(--color-navy-950, #011327);\n  --input-text: var(--color-slate-100, #f1f5f9);\n  --alert-background: var(--color-navy-900, #041c33);\n  --alert-font: var(--color-slate-100, #f1f5f9);\n  --delete-button: var(--color-red-600, #dc2626);\n  --delete-button-focus: var(--color-red-500, #ef4444);\n  --error-font: var(--color-red-400, #f87171);\n  --error-icon-color: var(--color-red-400, #f87171);\n  --info-icon-color: var(--color-accent-400, #22d3ee);\n}\n",
+          "defaultMessages": "@{theme/messages.properties}",
+          "templates": {
+            "accountEdit": "@{theme/accountEdit.ftl}",
+            "accountIndex": "@{theme/accountIndex.ftl}",
+            "accountTwoFactorDisable": "@{theme/accountTwoFactorDisable.ftl}",
+            "accountTwoFactorEnable": "@{theme/accountTwoFactorEnable.ftl}",
+            "accountTwoFactorIndex": "@{theme/accountTwoFactorIndex.ftl}",
+            "accountWebAuthnAdd": "@{theme/accountWebAuthnAdd.ftl}",
+            "accountWebAuthnDelete": "@{theme/accountWebAuthnDelete.ftl}",
+            "accountWebAuthnIndex": "@{theme/accountWebAuthnIndex.ftl}",
+            "confirmationRequired": "@{theme/confirmationRequired.ftl}",
+            "emailComplete": "@{theme/emailComplete.ftl}",
+            "emailSend": "@{theme/emailSend.ftl}",
+            "emailSent": "@{theme/emailSent.ftl}",
+            "emailVerificationRequired": "@{theme/emailVerificationRequired.ftl}",
+            "emailVerify": "@{theme/emailVerify.ftl}",
+            "helpers": "@{theme/helpers.ftl}",
+            "index": "@{theme/index.ftl}",
+            "oauth2Authorize": "@{theme/oauth2Authorize.ftl}",
+            "oauth2AuthorizedNotRegistered": "@{theme/oauth2AuthorizedNotRegistered.ftl}",
+            "oauth2ChildRegistrationNotAllowed": "@{theme/oauth2ChildRegistrationNotAllowed.ftl}",
+            "oauth2ChildRegistrationNotAllowedComplete": "@{theme/oauth2ChildRegistrationNotAllowedComplete.ftl}",
+            "oauth2CompleteRegistration": "@{theme/oauth2CompleteRegistration.ftl}",
+            "oauth2Consent": "@{theme/oauth2Consent.ftl}",
+            "oauth2Device": "@{theme/oauth2Device.ftl}",
+            "oauth2DeviceComplete": "@{theme/oauth2DeviceComplete.ftl}",
+            "oauth2Error": "@{theme/oauth2Error.ftl}",
+            "oauth2Logout": "@{theme/oauth2Logout.ftl}",
+            "oauth2Passwordless": "@{theme/oauth2Passwordless.ftl}",
+            "oauth2Register": "@{theme/oauth2Register.ftl}",
+            "oauth2StartIdPLink": "@{theme/oauth2StartIdPLink.ftl}",
+            "oauth2TwoFactor": "@{theme/oauth2TwoFactor.ftl}",
+            "oauth2TwoFactorEnable": "@{theme/oauth2TwoFactorEnable.ftl}",
+            "oauth2TwoFactorEnableComplete": "@{theme/oauth2TwoFactorEnableComplete.ftl}",
+            "oauth2TwoFactorMethods": "@{theme/oauth2TwoFactorMethods.ftl}",
+            "oauth2Wait": "@{theme/oauth2Wait.ftl}",
+            "oauth2WebAuthn": "@{theme/oauth2WebAuthn.ftl}",
+            "oauth2WebAuthnReauth": "@{theme/oauth2WebAuthnReauth.ftl}",
+            "oauth2WebAuthnReauthEnable": "@{theme/oauth2WebAuthnReauthEnable.ftl}",
+            "passwordChange": "@{theme/passwordChange.ftl}",
+            "passwordComplete": "@{theme/passwordComplete.ftl}",
+            "passwordForgot": "@{theme/passwordForgot.ftl}",
+            "passwordSent": "@{theme/passwordSent.ftl}",
+            "phoneComplete": "@{theme/phoneComplete.ftl}",
+            "phoneSent": "@{theme/phoneSent.ftl}",
+            "phoneVerificationRequired": "@{theme/phoneVerificationRequired.ftl}",
+            "phoneVerify": "@{theme/phoneVerify.ftl}",
+            "registrationComplete": "@{theme/registrationComplete.ftl}",
+            "registrationSend": "@{theme/registrationSend.ftl}",
+            "registrationSent": "@{theme/registrationSent.ftl}",
+            "registrationVerificationRequired": "@{theme/registrationVerificationRequired.ftl}",
+            "registrationVerify": "@{theme/registrationVerify.ftl}",
+            "samlv2Logout": "@{theme/samlv2Logout.ftl}",
+            "unauthorized": "@{theme/unauthorized.ftl}"
+          }
+        }
+      }
+    },
+    {
       "method": "PATCH",
       "url": "/api/tenant/#{defaultTenantId}",
       "body": {
@@ -76,7 +149,37 @@
             "defaultFromName": "The Agency",
             "implicitEmailVerificationAllowed": true,
             "setPasswordEmailTemplateId": "#{setPasswordEmailTemplateId}"
-          }
+          },
+          "themeId": "#{themeId}"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/form/field/#{selfServiceEmailFieldId}",
+      "body": {
+        "field": {
+          "key": "user.email",
+          "name": "[The Agency Account] Email",
+          "required": true
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/form/#{selfServiceFormId}",
+      "body": {
+        "form": {
+          "name": "The Agency Account Management",
+          "type": "selfServiceUser",
+          "steps": [
+            {
+              "type": "collectData",
+              "fields": [
+                "#{selfServiceEmailFieldId}"
+              ]
+            }
+          ]
         }
       }
     },
@@ -88,7 +191,7 @@
           "name": "[The Agency] Access token populate",
           "type": "JWTPopulate",
           "engineType": "GraalJS",
-          "body": "function populate(jwt, user, registration) {\n  jwt.preferred_username = user.username;\n  jwt.email = user.email;\n}"
+          "body": "function populate(jwt, user, registration) {\n  jwt.email = user.email;\n}"
         }
       }
     },
@@ -123,9 +226,24 @@
           "lambdaConfiguration": {
             "accessTokenPopulateId": "#{accessTokenPopulateLambdaId}"
           },
+          "registrationConfiguration": {
+            "enabled": true,
+            "loginIdType": "email"
+          },
+          "formConfiguration": {
+            "selfServiceFormId": "#{selfServiceFormId}"
+          },
           "roles": [
-            {"name": "admin", "isSuperRole": true, "isDefaultRole": false},
-            {"name": "user", "isSuperRole": false, "isDefaultRole": true}
+            {
+              "name": "admin",
+              "isSuperRole": true,
+              "isDefaultRole": false
+            },
+            {
+              "name": "user",
+              "isSuperRole": false,
+              "isDefaultRole": true
+            }
           ]
         }
       }
@@ -160,6 +278,13 @@
           },
           "lambdaConfiguration": {
             "accessTokenPopulateId": "#{accessTokenPopulateLambdaId}"
+          },
+          "registrationConfiguration": {
+            "enabled": true,
+            "loginIdType": "email"
+          },
+          "formConfiguration": {
+            "selfServiceFormId": "#{selfServiceFormId}"
           }
         }
       }
@@ -177,7 +302,6 @@
         "skipRegistrationVerification": true,
         "user": {
           "email": "#{adminEmail}",
-          "username": "AdminUser",
           "password": "#{adminPassword}"
         }
       }
@@ -216,7 +340,6 @@
         "skipRegistrationVerification": true,
         "user": {
           "email": "#{ordinaryEmail}",
-          "username": "OrdinaryUser",
           "password": "#{ordinaryPassword}"
         }
       }

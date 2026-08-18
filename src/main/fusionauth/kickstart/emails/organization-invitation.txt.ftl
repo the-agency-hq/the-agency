@@ -1,4 +1,4 @@
-Hi ${(user.username)!'there'},
+Hi there,
 
 You've been invited to join the Organization ${organizationName!''} on The Agency.
 

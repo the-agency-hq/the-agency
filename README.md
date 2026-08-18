@@ -4,9 +4,13 @@ The Agency web application that creates the Briefs that are then passed to the H
 ## Local FusionAuth
 
 Both halves of the Agency authenticate against FusionAuth — the admin UI in the browser and the Briefing API for
-Handlers — so a local instance has to be running before the server starts or the tests run:
+Handlers — so a local instance has to be running before the server starts or the tests run. First time only, copy
+the environment template and fill in your FusionAuth license key (`FUSIONAUTH_APP_LICENSE_KEY`). The key is
+required: the Kickstart points the Applications at a custom account-management form, a licensed feature, so
+without it the Applications fail to provision and nobody can log in:
 
-    cd src/main/fusionauth && docker compose up -d
+    cd src/main/fusionauth && cp .env.template .env
+    docker compose up -d
 
 It comes up on `http://localhost:9016` with two Applications and two users — `admin@theagencyhq.dev` and
 `user@theagencyhq.dev`, both `password` — registered for both, all provisioned by Kickstart. Kickstart only runs
@@ -16,6 +20,25 @@ The compose stack also runs Mailcatcher, and the Kickstart points the tenant's S
 invitation and set-password emails the membership pages send land at <http://localhost:1080> instead of failing.
 The email templates themselves live in `src/main/fusionauth/kickstart/emails/` and are provisioned by Kickstart
 like everything else.
+
+### The hosted pages wear the app's theme
+
+Kickstart provisions a full advanced theme — all 52 FreeMarker templates, in
+`src/main/fusionauth/kickstart/theme/` — so the login, password, error, and account pages look like the admin UI,
+including the same three-state light/dark toggle. Two layers make that work:
+
+- The pages link the admin UI's own stylesheet. The URL comes from the `FUSIONAUTH_APP_THEME_CSS_URL` environment
+  variable at Kickstart time (`src/main/fusionauth/.env` sets the dev value,
+  `http://localhost:8080/static/css/app.css`; production supplies `https://app.theagencyhq.dev/static/css/app.css`
+  when it first deploys). The app serves `/static` with `Cross-Origin-Resource-Policy: cross-origin` precisely so
+  this cross-origin link works.
+- The theme's own stylesheet maps FusionAuth's semantic tokens (`--page-background`, `--primary-button`, …) onto
+  the app's palette variables for light, and again under `.dark` for dark mode.
+
+Tailwind compiles the theme's templates too (`@source` in `src/main/css/app.css`), so classes used only by the
+theme still end up in `app.css`. Like everything Kickstart provisions, editing the theme files needs a
+`docker compose down -v` to take effect. The account pages' Edit Profile is a custom self-service form holding
+just the email — users have no username — and pointing an application at a custom form is what needs the license.
 
 | Application           | Who uses it            | Why it is its own client                                        |
 |-----------------------|------------------------|-----------------------------------------------------------------|
@@ -31,7 +54,9 @@ accepts and the Handler can obtain. Point the Handler at it by setting `authURL`
     "authURL": "http://localhost:9016"
 
 Visiting <http://localhost:8080/> redirects to the admin UI, which redirects to FusionAuth's hosted login. Sign in
-as `admin@theagencyhq.dev` / `password`; the "Sign out" control in the nav ends both sessions.
+as `admin@theagencyhq.dev` / `password`; the "Sign out" control in the nav ends both sessions. Both Applications
+also allow self-registration — the login page's "Create an account" link collects just an email and a password
+through FusionAuth's basic registration, so a new user can sign up without being invited first.
 
 FusionAuth is a startup dependency, not just a request-time one: `Main` runs OIDC Discovery and fetches the JWKS
 while it is constructing, so with FusionAuth down the Agency fails to start with `Failed to fetch OIDC discovery

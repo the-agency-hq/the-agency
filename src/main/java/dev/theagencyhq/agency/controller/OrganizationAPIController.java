@@ -47,8 +47,8 @@ public class OrganizationAPIController {
     res.setContentLength(bytes.length);
     res.getOutputStream().write(bytes);
 
-    // The user id, not the email or username, for the same reasons BriefingController logs it: it is stable, it is
-    // the least revealing claim, and it is what entitlements will key on. The access token is never logged.
+    // The user id, not the email, for the same reasons BriefingController logs it: it is stable, it is
+    // the less revealing claim, and it is what entitlements will key on. The access token is never logged.
     logger.log(System.Logger.Level.DEBUG, "Organizations response for user [{0}] with [{1}] Organizations",
         user.userId(), organizations.size());
   }

@@ -1,4 +1,4 @@
-Hi ${(user.username)!'there'},
+Hi there,
 
 You've been invited to The Agency. Visit the link below to set a password and finish creating your account.
 

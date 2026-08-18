@@ -4,10 +4,6 @@
 @param User viewer
 @param gg.jte.Content content
 
-<%-- Username when FusionAuth has one for this user, email otherwise. Both arrive as claims, so either can be
-     absent depending on how the provider is configured, and the chrome should not render a blank space. --%>
-!{String viewerName = viewer.username() != null ? viewer.username() : viewer.email();}
-
 <!doctype html>
 <html lang="en" class="scroll-smooth">
 <head>
@@ -38,13 +34,20 @@
       </a>
       <div class="flex items-center gap-2">
         <a href="/app/organizations/" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors px-2 py-1">Organizations</a>
+        <a href="/app/account" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors px-2 py-1">Account</a>
         @template.components.theme-toggle()
         <div class="flex items-center gap-2 border-l border-slate-200 dark:border-navy-800 pl-2 ml-1">
-          <span class="hidden sm:inline max-w-40 truncate text-sm text-slate-600 dark:text-slate-300" title="${viewer.email()}">${viewerName}</span>
+          <span class="hidden sm:inline max-w-40 truncate text-sm text-slate-600 dark:text-slate-300" title="${viewer.email()}">${viewer.email()}</span>
           <!-- POST, not a link: a GET logout is followed by link prefetchers and page scanners, which would sign
                people out sideways. form-action in the CSP is 'self', and this posts to our own /logout. -->
           <form method="post" action="/logout">
-            <button type="submit" class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors px-2 py-1">Sign out</button>
+            <!-- The same logout glyph the FusionAuth account pages' header uses, as an icon button styled like
+                 the theme toggle beside it. -->
+            <button type="submit" title="Sign out" aria-label="Sign out" class="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-navy-800 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"/>
+              </svg>
+            </button>
           </form>
         </div>
       </div>
@@ -59,7 +62,7 @@
 <footer class="border-t border-slate-200 dark:border-navy-800 mt-16">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
     <p class="text-xs text-slate-500 dark:text-slate-400">
-      The Agency — administration. Signed in as ${viewerName}; every registered user here is fully privileged.
+      The Agency — administration. Signed in as ${viewer.email()}; every registered user here is fully privileged.
     </p>
   </div>
 </footer>

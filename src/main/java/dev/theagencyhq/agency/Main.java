@@ -155,7 +155,10 @@ public class Main {
        // below.
        .install(new FilteredMiddleware("/static", SecurityHeaders.empty().crossOriginResourcePolicy("cross-origin")))
        .files("/static")
-       .install(SecurityHeaders.defaults())
+       // script-src widens beyond 'self' for exactly one origin: the theme-switching script is loaded from the
+       // website, the same copy the FusionAuth theme loads, so all three surfaces share one script.
+       .install(SecurityHeaders.defaults()
+                               .contentSecurityPolicy(CSP.defaults().scriptSrc(CSP.SELF, "https://theagencyhq.dev")))
        // An unmatched path renders the same styled 404 the controllers use, rather than the empty-body default
        // that a browser turns into its own error page or a blank one.
        .missingHandler(Main::missing)

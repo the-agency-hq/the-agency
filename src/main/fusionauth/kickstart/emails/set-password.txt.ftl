@@ -6,4 +6,4 @@ ${tenant.issuer}/password/change/${changePasswordId}?tenantId=${user.tenantId}&c
 
 You're receiving this because someone invited you to The Agency. If you weren't expecting this, you can safely ignore this email.
 
-— The Agency
+— The Agency · https://theagencyhq.dev

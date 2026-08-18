@@ -11,9 +11,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>${pageTitle} · The Agency</title>
   <link rel="icon" href="/static/images/logo-mark.svg" type="image/svg+xml"/>
-  <!-- Before the stylesheet and without defer, so a dark-mode reload never flashes the light theme first. It is
-       an external file because SecurityHeaders' CSP is `default-src 'self'` with no 'unsafe-inline'. -->
-  <script src="/static/js/theme.js"></script>
+  <!-- Before the stylesheet and without defer, so a dark-mode reload never flashes the light theme first. The
+       canonical copy on the website, which the FusionAuth theme also loads, so all three surfaces share one
+       script and one "theme" localStorage key; the CSP's script-src in Main allows the origin. -->
+  <%-- crossorigin because SecurityHeaders' Cross-Origin-Embedder-Policy is require-corp: a cross-origin script
+       must opt in via CORP or load in CORS mode, and the website serves access-control-allow-origin. --%>
+  <script src="https://theagencyhq.dev/js/theme-0.1.0.js" crossorigin></script>
   <!-- Deferred, unlike theme.js: nothing they do is visible before first paint, and they only have to be in place
        by the time someone can click. External for the same CSP reason -- an inline onclick= would be refused.
        Both are loaded on every page and each does nothing on a page without the elements it looks for, which is

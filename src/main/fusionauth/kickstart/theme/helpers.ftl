@@ -110,7 +110,7 @@
        preference is independent of the admin UI's), and wires the .theme-toggle button and .theme-icon-*
        icons. Loaded synchronously from the head, without defer, so it applies the stored theme before first
        paint and a reload in dark mode never flashes light. --]
-    <script src="https://the-agency-hq.dev/js/theme-0.1.0.js"></script>
+    <script src="https://theagencyhq.dev/js/theme-0.1.0.js"></script>
 
     <script src="${request.contextPath}/js/prime-min-1.7.0.js?version=${version}"></script>
     <script src="${request.contextPath}/js/Util.js?version=${version}"></script>
@@ -157,7 +157,7 @@
   </body>
 [/#macro]
 
-[#-- The full Agency logo, copied from the website's homepage (https://the-agency-hq.dev). Inlined rather than
+[#-- The full Agency logo, copied from the website's homepage (https://theagencyhq.dev). Inlined rather than
      an <img src> because the lettering is fill="currentColor" so it follows the page's text colour, and the icon
      fills ride the Tailwind palette variables app.css emits (each with a hex fallback), none of which an <img>
      can do. --]
@@ -280,11 +280,6 @@
 [/#macro]
 
 [#macro main title="Login" rowClass="row center-xs" colClass="col-xs col-sm-8 col-md-6 col-lg-5 col-xl-4"]
-  [#-- The auth pages have no header, so the theme toggle floats where the admin UI's nav would put it. The two
-       pages that do render the header (the landing page and the account pages) already carry a toggle there. --]
-  [#if !(request.requestURI == "/" || request.requestURI?starts_with("/account"))]
-    <div class="fixed top-3 right-3 z-50">[@themeToggle/]</div>
-  [/#if]
   <main class="min-h-screen bg-page-bg flex flex-col items-center px-5 py-15 bg-(image:--img-background) bg-(repeat:--background-repeat) bg-(size:--background-size)">
     <div class="w-full max-w-[352px] rounded-theme">
       <div class="flex justify-center mb-8">
@@ -303,8 +298,14 @@
         </div>
       </div>
     </div>
-    <div class="w-full flex justify-center max-w-[352px] mt-8">
+    [#-- The auth pages have no header, so the theme toggle sits beside the locale selector instead of in a nav.
+         The two pages that do render the header (the landing page and the account pages) already carry a toggle
+         there. --]
+    <div class="w-full flex justify-center items-center gap-2 max-w-[352px] mt-8">
       <div class="w-min-content">[@localeSelector/]</div>
+      [#if !(request.requestURI == "/" || request.requestURI?starts_with("/account"))]
+        [@themeToggle/]
+      [/#if]
     </div>
   </main>
 [/#macro]

@@ -3,7 +3,7 @@
   "variables": {
     "adminEmail": "admin@theagencyhq.dev",
     "adminPassword": "password",
-    "adminUserId": "#{UUID()}",
+    "adminUserId": "8ff736db-55a4-4360-aac8-d714624d788c",
     "agencyApplicationId": "7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742",
     "agencyClientSecret": "super-secret-secret-that-should-be-regenerated-for-production",
     "apiKey": "33052c8a-c283-4e96-9d2a-eb1215c69f8f-not-for-prod",
@@ -16,7 +16,7 @@
     "setPasswordEmailTemplateId": "fc6283a9-ed8e-41f1-88f8-083373bea708",
     "ordinaryEmail": "user@theagencyhq.dev",
     "ordinaryPassword": "password",
-    "ordinaryUserId": "#{UUID()}",
+    "ordinaryUserId": "3383ed14-76f3-4325-87f4-6f4422b3e007",
     "selfServiceEmailFieldId": "#{UUID()}",
     "selfServiceFormId": "#{UUID()}",
     "themeId": "d5bfbc90-d241-4ea7-ae89-cec6c2b2d132"

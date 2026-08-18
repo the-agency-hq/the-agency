@@ -8,7 +8,7 @@
   <title>Not Found · The Agency</title>
   <link rel="icon" href="/static/images/logo-mark.svg" type="image/svg+xml"/>
   <!-- Before the stylesheet and without defer, so a dark-mode reload never flashes the light theme first. -->
-  <script src="/static/js/theme.js"></script>
+  <script src="https://theagencyhq.dev/js/theme-0.1.0.js" crossorigin></script>
   <link rel="stylesheet" href="/static/css/app.css"/>
 </head>
 <body class="bg-white text-slate-900 dark:bg-navy-950 dark:text-slate-100 transition-colors duration-200">

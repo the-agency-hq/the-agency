@@ -6,23 +6,18 @@ package dev.theagencyhq.agency.service;
 
 import module java.base;
 
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.github.GitHubClient;
-import dev.theagencyhq.agency.github.GitHubException;
-import dev.theagencyhq.agency.github.GitHubUnauthorizedException;
-import dev.theagencyhq.agency.model.Brief;
-import dev.theagencyhq.agency.model.BriefSource;
-import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.SourceStatus;
+import dev.theagencyhq.agency.db.*;
+import dev.theagencyhq.agency.github.*;
+import dev.theagencyhq.agency.model.*;
 
 /**
- * The poll service: ask GitHub what each registered source's branch points at, and rebuild its Brief when the
- * content changes.
+ * The poll service: ask GitHub what each registered source's branch points at, and rebuild its Brief when the content
+ * changes.
  *
  * <p>Runs every {@code poller.intervalSeconds} and wakes early on a {@link #nudge()} from the admin UI's
- * "Rebuild now" button. The nudge carries no payload, so a rebuild request runs the ordinary full cycle rather
- * than a second, subtly different code path for one Organization — the scheduled cycle already polls every source,
- * so this costs nothing a timer tick did not already cost.
+ * "Rebuild now" button. The nudge carries no payload, so a rebuild request runs the ordinary full cycle rather than a
+ * second, subtly different code path for one Organization — the scheduled cycle already polls every source, so this
+ * costs nothing a timer tick did not already cost.
  *
  * <p>An unchanged source costs exactly one GitHub request per cycle: the commit lookup. Only a source whose branch
  * has actually moved pays for the tree and the archive. That ratio is what makes polling every Organization on a
@@ -71,7 +66,9 @@ public class PollerService extends IntervalThread {
       counts.merge(status, 1, Integer::sum);
     }
 
-    logger.log(System.Logger.Level.INFO, "Poll cycle complete [{0}]", counts);
+    if (!counts.isEmpty()) {
+      logger.log(System.Logger.Level.INFO, "Poll cycle complete [{0}]", counts);
+    }
   }
 
   @Override
@@ -123,6 +120,14 @@ public class PollerService extends IntervalThread {
     return record(source, head, SourceStatus.OK, null);
   }
 
+  // The message is deliberately the same however the authorization turned out to be dead, because the instruction
+  // is the same: reconnect. Which of the two paths got here is a detail for the log, not for the operator.
+  private SourceStatus notConnected(BriefSource source, RuntimeException cause) {
+    logger.log(System.Logger.Level.WARNING, "No usable GitHub authorization for [" + source.fullName() + "]", cause);
+    return record(source, source.lastBuiltCommit(), SourceStatus.NOT_CONNECTED,
+        "The GitHub authorization for this source is no longer valid. Reconnect the Organization to restore it.");
+  }
+
   private SourceStatus poll(BriefSource source) {
     // The token first, because everything else needs it and because it is the one failure the operator has to act
     // on. A source whose authorization has lapsed keeps serving its current Brief and says so on its detail page.
@@ -158,14 +163,6 @@ public class PollerService extends IntervalThread {
     }
 
     return build(source, accessToken, head);
-  }
-
-  // The message is deliberately the same however the authorization turned out to be dead, because the instruction
-  // is the same: reconnect. Which of the two paths got here is a detail for the log, not for the operator.
-  private SourceStatus notConnected(BriefSource source, RuntimeException cause) {
-    logger.log(System.Logger.Level.WARNING, "No usable GitHub authorization for [" + source.fullName() + "]", cause);
-    return record(source, source.lastBuiltCommit(), SourceStatus.NOT_CONNECTED,
-        "The GitHub authorization for this source is no longer valid. Reconnect the Organization to restore it.");
   }
 
   private SourceStatus record(BriefSource source, String commit, SourceStatus status, String error) {

@@ -1,0 +1,9 @@
+{
+  "name": "the-agency-railway-iac",
+  "private": true,
+  "type": "module",
+  "description": "Railway Infrastructure as Code SDK for railway.ts. Used only by the Railway CLI, never by the app.",
+  "dependencies": {
+    "railway": "^3.10.0"
+  }
+}

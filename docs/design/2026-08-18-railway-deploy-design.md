@@ -98,14 +98,14 @@ latte deploy   →   latte bundle   →   railway up --no-gitignore --ci
 the upload. Two dot-files shape that upload:
 
 - **`.railwayignore`** — `build/` is gitignored, so the bundle would never upload without `--no-gitignore`; with
-  it, everything would. This file (gitignore syntax) excludes everything except `Dockerfile`, `railway.json`,
-  and `build/bundle`.
+  it, everything would. This file (gitignore syntax) excludes everything except `Dockerfile` and `build/bundle`.
+  The IaC file (§8) is read by `railway config`, never by `railway up`, so it stays out of the upload.
 - **`.dockerignore`** — same shape, for anyone running `docker build` locally; Railway's upload is already
   filtered.
 
-`railway.json` at the repo root is the service's config-as-code: Dockerfile builder, `healthcheckPath:
-"/health"`, one replica, restart on failure. One-time setup per machine: `railway link` to bind the directory to
-the project and the `the-agency` service.
+The service's healthcheck, replica count, domain, and variables are not part of the upload at all — they are
+declared in `.railway/railway.ts`, the project's Infrastructure as Code (§8). One-time setup per machine:
+`railway link` to bind the directory to the project and the `the-agency` service.
 
 ## 5. Application changes
 
@@ -139,8 +139,8 @@ COPY kickstart/ /usr/local/fusionauth/kickstart/
 
 The `fusionauth` Railway service builds it straight from the GitHub repo with its root directory set to
 `src/main/fusionauth` — kickstart changes deploy by push, which is safe because kickstart only ever applies to
-an empty database. A `railway.json` in the same directory sets `healthcheckPath: "/api/status"` (the same
-endpoint the compose healthcheck uses) and the target port is 9011.
+an empty database. The GitHub source, the root directory, the `/api/status` healthcheck (the same endpoint the
+compose healthcheck uses), and the 9011 target port are all declared in `.railway/railway.ts` (§8).
 
 Differences from the compose stack, all environment-driven:
 
@@ -197,39 +197,132 @@ FusionAuth admin UI against a real provider (Postmark, Resend, SES — operator'
 invitation emails fail visibly in FusionAuth's logs; nothing else is affected. This is a runbook step (§10), not
 code.
 
-## 8. Production configuration
+## 8. Production configuration: Infrastructure as Code
+
+Railway deprecated per-service config-as-code (`railway.json` / `railway.toml`): new services cannot opt into
+it, and existing files stop being read on 2026-12-01. Its replacement, Infrastructure as Code, is a better fit
+anyway — one `.railway/railway.ts` at the repo root declares the entire §2 topology (services, databases,
+domains, replicas, healthchecks, variables), and `railway config plan` / `railway config apply` diff and apply
+it against the linked project. The file is authored against the `railway` npm SDK; a `package.json` inside
+`.railway/` keeps that dependency isolated from the Java project (Node and npm are already build prerequisites
+via Tailwind), and the Railway CLI is the file's only consumer — nothing about the app's runtime changes.
+
+**Where values live.** One rule decides what is a literal in the file and what is not: facts fixed by this
+design (URLs, application UUIDs, runtime modes, memory) are literals; anything minted during the first deploy
+(the §10.1 secrets, the GitHub App identity, the license key) is a Railway **shared variable**, set once at the
+project level and referenced from the file as `ctx.shared.*`. The file is therefore committable as-is — it
+names every secret but contains none — and each secret still lives in exactly one place: `KICKSTART_API_KEY` is
+one shared variable that the `fusionauth` service exposes to kickstart and the `the-agency` service reads as
+`FUSIONAUTH_APIKEY`. Database credentials are typed references (`agencyPostgres.env.PGPASSWORD`), which also
+records a dependency edge from the service to its database; only the composed JDBC URLs fall back to Railway's
+`${{service.VAR}}` template syntax as literal strings, because a typed reference cannot be embedded in a larger
+string. Either way the file holds references, not values.
 
 `Configuration` maps `db.password` → `DB_PASSWORD` (uppercase, non-alphanumerics to underscores), so every
-setting is a Railway variable. The `the-agency` service, with `${{...}}` marking Railway references:
+setting the app reads is an environment variable on its service. The complete file:
 
-| Variable                        | Value                                                                        |
-|---------------------------------|------------------------------------------------------------------------------|
-| `DB_URL`                        | `jdbc:postgresql://${{agency-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{agency-postgres.PGDATABASE}}` |
-| `DB_USERNAME` / `DB_PASSWORD`   | `${{agency-postgres.PGUSER}}` / `${{agency-postgres.PGPASSWORD}}`             |
-| `FUSIONAUTH_BASEURL`            | `https://auth.theagencyhq.dev`                                                |
-| `FUSIONAUTH_ISSUER`             | `https://auth.theagencyhq.dev` (must equal `KICKSTART_TENANT_ISSUER`)         |
-| `FUSIONAUTH_APIKEY`             | same value as `KICKSTART_API_KEY`                                             |
-| `FUSIONAUTH_CLIENTID`           | `7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742` (unchanged UUID)                       |
-| `FUSIONAUTH_CLIENTSECRET`       | same value as `KICKSTART_AGENCY_CLIENT_SECRET`                                |
-| `FUSIONAUTH_HANDLERCLIENTID`    | `fa83bc7c-f1c5-48af-8ecb-6c09cf766d73` (unchanged UUID)                       |
-| `FUSIONAUTH_HANDLERCLIENTSECRET`| same value as `KICKSTART_HANDLER_CLIENT_SECRET`                               |
-| `GITHUB_APPNAME` / `GITHUB_CLIENTID` / `GITHUB_CLIENTSECRET` | the production GitHub App (§10)                  |
-| `RUNTIME_MODE`                  | `production`                                                                  |
-| `WEB_COOKIEENCRYPTIONKEY`       | freshly generated 32-byte base64 key                                          |
+The file is `.railway/railway.ts` in the repository — the listing below is the real file, minus the copyright
+header:
 
-The `fusionauth` service carries the compose stack's variables minus the compose-only ones
-(`FUSIONAUTH_LOCAL_*`, `OPENSEARCH_JAVA_OPTS`, `SEARCH_SERVERS`), with `DATABASE_URL` pointed at
-`fusionauth-postgres`'s private domain, `SEARCH_TYPE=database`, `FUSIONAUTH_APP_RUNTIME_MODE=production`, the
-production theme URLs, and the seven `KICKSTART_*` values from §7.
+```ts
+import { defineRailway, github, postgres, project, service } from "railway/iac";
 
-Secrets that must be generated for production and appear in two places each (kickstart and app config): the API
-key, both client secrets. Generated once, stored only as Railway variables.
+export default defineRailway((ctx) => {
+  const agencyPostgres = postgres("agency-postgres");
+  const fusionauthPostgres = postgres("fusionauth-postgres");
+
+  const fusionauth = service("fusionauth", {
+    build: {
+      builder: "DOCKERFILE",
+      // App-only pushes to main must not rebuild FusionAuth.
+      watchPatterns: ["/src/main/fusionauth/**"],
+    },
+    deploy: {
+      restartPolicyType: "ON_FAILURE",
+    },
+    domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
+    env: {
+      DATABASE_PASSWORD: ctx.shared.FUSIONAUTH_DATABASE_PASSWORD,
+      DATABASE_ROOT_PASSWORD: fusionauthPostgres.env.PGPASSWORD,
+      DATABASE_ROOT_USERNAME: fusionauthPostgres.env.PGUSER,
+      DATABASE_URL: "jdbc:postgresql://${{fusionauth-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/fusionauth",
+      DATABASE_USERNAME: "fusionauth",
+      FUSIONAUTH_APP_KICKSTART_FILE: "/usr/local/fusionauth/kickstart/kickstart.json",
+      FUSIONAUTH_APP_LICENSE_KEY: ctx.shared.FUSIONAUTH_APP_LICENSE_KEY,
+      FUSIONAUTH_APP_MEMORY: "512M",
+      FUSIONAUTH_APP_RUNTIME_MODE: "production",
+      FUSIONAUTH_APP_THEME_APP_URL: "https://app.theagencyhq.dev",
+      FUSIONAUTH_APP_THEME_CSS_URL: "https://app.theagencyhq.dev/static/css/app.css",
+      FUSIONAUTH_APP_URL: "https://auth.theagencyhq.dev",
+      KICKSTART_ADMIN_PASSWORD: ctx.shared.KICKSTART_ADMIN_PASSWORD,
+      KICKSTART_AGENCY_CLIENT_SECRET: ctx.shared.KICKSTART_AGENCY_CLIENT_SECRET,
+      KICKSTART_API_KEY: ctx.shared.KICKSTART_API_KEY,
+      KICKSTART_HANDLER_CLIENT_SECRET: ctx.shared.KICKSTART_HANDLER_CLIENT_SECRET,
+      KICKSTART_ORDINARY_PASSWORD: ctx.shared.KICKSTART_ORDINARY_PASSWORD,
+      KICKSTART_TENANT_ISSUER: "https://auth.theagencyhq.dev",
+      SEARCH_TYPE: "database",
+    },
+    healthcheck: "/api/status",
+    replicas: 1,
+    source: github("the-agency-hq/the-agency", { branch: "main", rootDirectory: "src/main/fusionauth" }),
+  });
+
+  const theAgency = service("the-agency", {
+    // No source: deploys arrive from `latte deploy` / `railway up` (design §4).
+    build: {
+      builder: "DOCKERFILE",
+    },
+    deploy: {
+      restartPolicyType: "ON_FAILURE",
+    },
+    domains: [{ domain: "app.theagencyhq.dev", port: 8080 }],
+    env: {
+      DB_PASSWORD: agencyPostgres.env.PGPASSWORD,
+      DB_URL: "jdbc:postgresql://${{agency-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{agency-postgres.PGDATABASE}}",
+      DB_USERNAME: agencyPostgres.env.PGUSER,
+      FUSIONAUTH_APIKEY: ctx.shared.KICKSTART_API_KEY,
+      FUSIONAUTH_BASEURL: "https://auth.theagencyhq.dev",
+      FUSIONAUTH_CLIENTID: "7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742",
+      FUSIONAUTH_CLIENTSECRET: ctx.shared.KICKSTART_AGENCY_CLIENT_SECRET,
+      FUSIONAUTH_HANDLERCLIENTID: "fa83bc7c-f1c5-48af-8ecb-6c09cf766d73",
+      FUSIONAUTH_HANDLERCLIENTSECRET: ctx.shared.KICKSTART_HANDLER_CLIENT_SECRET,
+      FUSIONAUTH_ISSUER: "https://auth.theagencyhq.dev",
+      GITHUB_APPNAME: ctx.shared.GITHUB_APPNAME,
+      GITHUB_CLIENTID: ctx.shared.GITHUB_CLIENTID,
+      GITHUB_CLIENTSECRET: ctx.shared.GITHUB_CLIENTSECRET,
+      RUNTIME_MODE: "production",
+      WEB_COOKIEENCRYPTIONKEY: ctx.shared.WEB_COOKIEENCRYPTIONKEY,
+    },
+    healthcheck: "/health",
+    replicas: 1,
+  });
+
+  return project("the-agency", {
+    resources: [agencyPostgres, fusionauthPostgres, fusionauth, theAgency],
+  });
+});
+```
+
+Notes on the file:
+
+- **The `build` and `deploy` blocks carry everything `railway.json` used to** — Dockerfile builder, restart on
+  failure — plus the `fusionauth` watch paths, which under config-as-code were a dashboard-only setting. The
+  `healthcheck` and `replicas` shorthands merge into the same deploy config.
+- The `fusionauth` env is the compose stack's variables minus the compose-only ones (`FUSIONAUTH_LOCAL_*`,
+  `OPENSEARCH_JAVA_OPTS`, `SEARCH_SERVERS`), with `SEARCH_TYPE=database`, production mode, the production theme
+  URLs, and the seven `KICKSTART_*` values from §7.
+- `FUSIONAUTH_ISSUER` and `KICKSTART_TENANT_ISSUER` must stay the same literal — the token issuer and what the
+  app validates against are one fact.
+
+Because `railway config apply` creates the `fusionauth` service together with its complete environment, the §7
+kickstart trap — a first boot with partial variables — is unreachable by construction, provided every shared
+variable exists before the first apply. §10.4 orders the runbook accordingly.
 
 ## 9. Operational constraints
 
 - **Exactly one replica of `the-agency`.** `PollerService` has no leader election; N replicas poll every source
   N times concurrently. The insert path tolerates it (checksums skip unchanged content) but duplicate versions
-  become possible. `railway.json` pins `numReplicas: 1`; scaling out is a future design (leader election or
+  become possible. `.railway/railway.ts` pins `replicas: 1`; scaling out is a future design (leader election or
   extracting the poller).
 - **Deploys are not zero-downtime-guaranteed.** Railway overlaps old and new instances when healthchecks are
   configured, but two instances of the app briefly polling at once is the same story as replicas — acceptable
@@ -245,97 +338,33 @@ Steps run in order. Railway UI references are as of August 2026; the dashboard i
 ### 10.1 Prerequisites
 
 1. A Railway account with a workspace, signed in at `railway.com`.
-2. The Railway CLI on the deploying machine: `brew install railway`, then `railway login` (opens the browser).
-3. DNS access for `theagencyhq.dev` — two subdomains get CNAME + TXT records.
-4. Generate the production secrets once, locally, and keep them in a password manager until they are pasted into
-   Railway in steps 10.3 and 10.6:
+2. The Railway CLI on the deploying machine, current enough to have the `railway config` commands:
+   `brew install railway` (or `brew upgrade railway`), then `railway login` (opens the browser).
+3. The IaC SDK: `cd .railway && npm install` — installs the `railway` npm package that `railway.ts` imports
+   (§8). Node and npm are already on the machine as build prerequisites.
+4. DNS access for `theagencyhq.dev` — two subdomains get CNAME + TXT records.
+5. Generate the production secrets once, locally, and keep them in a password manager until they are pasted into
+   Railway in step 10.4:
 
    | Secret                            | Generate with                                                                                        |
    |-----------------------------------|------------------------------------------------------------------------------------------------------|
+   | `FUSIONAUTH_DATABASE_PASSWORD`    | `openssl rand -hex 24`                                                                               |
    | `KICKSTART_ADMIN_PASSWORD`        | `openssl rand -base64 18`                                                                            |
    | `KICKSTART_AGENCY_CLIENT_SECRET`  | `openssl rand -base64 32`                                                                            |
    | `KICKSTART_API_KEY`               | `uuidgen \| tr 'A-Z' 'a-z'`                                                                          |
    | `KICKSTART_HANDLER_CLIENT_SECRET` | `openssl rand -base64 32`                                                                            |
    | `KICKSTART_ORDINARY_PASSWORD`     | `openssl rand -base64 18`                                                                            |
    | `WEB_COOKIEENCRYPTIONKEY`         | `openssl rand -base64 32` (must be exactly 32 bytes of base64 — `Cookies.encryptionKeys` decodes it) |
-   | FusionAuth's `DATABASE_PASSWORD`  | `openssl rand -hex 24`                                                                               |
 
-### 10.2 Project and databases
+### 10.2 Project and link
 
-1. On the Railway dashboard, click **New Project**. Name it `the-agency` (click the project name at the top left
-   → **Settings** to rename later).
-2. Click **New** (top right of the project canvas, or `Cmd+K`) → **Database** → **Add PostgreSQL**. Do it twice —
-   two separate Postgres services, per §2.
-3. Rename them: click each Postgres service tile → **Settings** tab → change the service name to
-   `agency-postgres` and `fusionauth-postgres`. Rename **before** writing any variables — the `${{...}}`
-   references in 10.3 and 10.6 resolve by service name.
+1. On the Railway dashboard, click **New Project**. Name it `the-agency`. If the workspace has never connected
+   GitHub, install Railway's GitHub App on the org now and grant it this repository — the `github()` source in
+   `railway.ts` needs it before the apply in 10.5.
+2. From the repo root: `railway link` — pick the workspace, the `the-agency` project, and the production
+   environment. The link is stored per-directory and is what `railway config` and `railway up` operate on.
 
-### 10.3 FusionAuth
-
-1. Click **New** → **GitHub Repo** → pick `the-agency-hq/the-agency` (the first time, Railway walks through
-   installing its GitHub App on the org — grant it this repository). The new service appears **staged**: nothing
-   builds until the staged changes are deployed, so finish all of this configuration first.
-2. **Settings** tab → rename the service to `fusionauth`.
-3. **Settings** → **Source** section:
-   - **Root Directory**: `/src/main/fusionauth` — the build context becomes that directory, where the FusionAuth
-     `Dockerfile` lives (§6).
-   - **Watch Paths**: `/src/main/fusionauth/**` — otherwise every push to `main` rebuilds this service, including
-     app-only commits.
-4. **Settings** → **Config-as-code** section → set the file path to `/src/main/fusionauth/railway.json`
-   (absolute from the repo root). This is what carries the `/api/status` healthcheck and the single replica.
-5. **Variables** tab → **RAW Editor** → paste, filling in the generated values from 10.1:
-
-   ```
-   DATABASE_PASSWORD=<generated>
-   DATABASE_ROOT_PASSWORD=${{fusionauth-postgres.PGPASSWORD}}
-   DATABASE_ROOT_USERNAME=${{fusionauth-postgres.PGUSER}}
-   DATABASE_URL=jdbc:postgresql://${{fusionauth-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/fusionauth
-   DATABASE_USERNAME=fusionauth
-   FUSIONAUTH_APP_KICKSTART_FILE=/usr/local/fusionauth/kickstart/kickstart.json
-   FUSIONAUTH_APP_LICENSE_KEY=<license key, or any placeholder string without one>
-   FUSIONAUTH_APP_MEMORY=512M
-   FUSIONAUTH_APP_RUNTIME_MODE=production
-   FUSIONAUTH_APP_THEME_APP_URL=https://app.theagencyhq.dev
-   FUSIONAUTH_APP_THEME_CSS_URL=https://app.theagencyhq.dev/static/css/app.css
-   FUSIONAUTH_APP_URL=https://auth.theagencyhq.dev
-   KICKSTART_ADMIN_PASSWORD=<generated>
-   KICKSTART_AGENCY_CLIENT_SECRET=<generated>
-   KICKSTART_API_KEY=<generated>
-   KICKSTART_HANDLER_CLIENT_SECRET=<generated>
-   KICKSTART_ORDINARY_PASSWORD=<generated>
-   KICKSTART_TENANT_ISSUER=https://auth.theagencyhq.dev
-   SEARCH_TYPE=database
-   ```
-
-   **All of it goes in before the first deploy.** Kickstart runs exactly once, against the empty database, with
-   whatever environment the container has at that moment — booting with the database variables but without the
-   `KICKSTART_*` ones would provision empty secrets, and the only recovery is dropping the `fusionauth` database.
-   Pasting the block as one unit makes that state unreachable.
-6. **Settings** → **Networking** → **Public Networking** → **+ Custom Domain** → `auth.theagencyhq.dev`, and pick
-   port **9011** from the port dropdown. Railway shows a **CNAME** record and a **TXT** record — add **both** at
-   the DNS provider exactly as shown (the TXT record verifies ownership; without it requests 404 even after the
-   CNAME resolves). Verification shows as a green checkmark; propagation is usually minutes, up to 72 hours.
-7. Deploy the staged changes (the **Deploy** button in the banner, or `Shift+Enter`). Watch the **Deployments**
-   tab → the running deploy's **Deploy Logs**: FusionAuth enters maintenance mode, creates its schema, then logs
-   the kickstart requests. The deploy goes healthy when `/api/status` answers.
-8. Verify from a terminal:
-
-   ```
-   curl -fs https://auth.theagencyhq.dev/.well-known/openid-configuration
-   ```
-
-   must report `"issuer":"https://auth.theagencyhq.dev"`. If it still says `localhost`, kickstart ran with the
-   wrong environment — see the warning in step 5.
-
-### 10.4 Tenant SMTP (§7)
-
-1. Sign in at `https://auth.theagencyhq.dev` as `admin@theagencyhq.dev` / `KICKSTART_ADMIN_PASSWORD`.
-2. **Tenants** → **Default** → edit → **Email** tab → fill in the SMTP host, port, username, password, and
-   security setting from the chosen provider (Postmark, Resend, SES — the account and its sending domain
-   verification for `theagencyhq.dev` are provider-side work, done first).
-3. Use **Send test email** on the same screen, and confirm it arrives.
-
-### 10.5 The production GitHub App
+### 10.3 The production GitHub App
 
 Per `README.md`'s requirements, on github.com: **Settings** → **Developer settings** → **GitHub Apps** →
 **New GitHub App**:
@@ -344,58 +373,83 @@ Per `README.md`'s requirements, on github.com: **Settings** → **Developer sett
 - **Expire user authorization tokens**: enabled
 - Repository permissions: **Contents: Read-only**, **Metadata: Read-only**
 - Generate a client secret and note the app's slug (the name as it appears in its URL), client ID, and secret —
-  they become `GITHUB_APPNAME`, `GITHUB_CLIENTID`, and `GITHUB_CLIENTSECRET` in 10.6.
+  they become the `GITHUB_APPNAME`, `GITHUB_CLIENTID`, and `GITHUB_CLIENTSECRET` shared variables in 10.4.
 
-### 10.6 The `the-agency` service
+### 10.4 Shared variables
 
-1. Click **New** → **Empty Service** (it receives CLI uploads, not GitHub pushes — §4). **Settings** tab → rename
-   it to `the-agency`.
-2. **Variables** tab → **RAW Editor** → paste. The FusionAuth secrets are references into the `fusionauth`
-   service's variables, so each secret lives in exactly one place:
+Project **Settings** → **Shared Variables**, production environment — add every value the `ctx.shared.*`
+references in `railway.ts` name, filling in the generated values from 10.1 and the GitHub App values from 10.3:
+
+```
+FUSIONAUTH_APP_LICENSE_KEY=<license key, or any placeholder string without one>
+FUSIONAUTH_DATABASE_PASSWORD=<generated>
+GITHUB_APPNAME=<slug from 10.3>
+GITHUB_CLIENTID=<from 10.3>
+GITHUB_CLIENTSECRET=<from 10.3>
+KICKSTART_ADMIN_PASSWORD=<generated>
+KICKSTART_AGENCY_CLIENT_SECRET=<generated>
+KICKSTART_API_KEY=<generated>
+KICKSTART_HANDLER_CLIENT_SECRET=<generated>
+KICKSTART_ORDINARY_PASSWORD=<generated>
+WEB_COOKIEENCRYPTIONKEY=<generated>
+```
+
+**All of it goes in before the first apply.** Kickstart runs exactly once, against the empty database, with
+whatever environment the container has at that moment — a `fusionauth` service created while a `KICKSTART_*`
+shared variable is missing would provision empty secrets, and the only recovery is dropping the `fusionauth`
+database. With every shared variable in place first, 10.5's apply creates the service with its complete
+environment and that state is unreachable (§8).
+
+### 10.5 Apply the infrastructure
+
+1. From the repo root: `railway config plan`. Review the preview: two Postgres services, `fusionauth`,
+   `the-agency`, both custom domains, and the §8 variables.
+2. `railway config apply`. Railway creates everything; `fusionauth` starts building from the GitHub repo
+   immediately, while `the-agency` has no source and sits idle until 10.7.
+3. DNS: each service's **Settings** → **Networking** shows a **CNAME** record and a **TXT** record for its
+   custom domain — add **both pairs** at the DNS provider exactly as shown (the TXT record verifies ownership;
+   without it requests 404 even after the CNAME resolves). Verification shows as a green checkmark; propagation
+   is usually minutes, up to 72 hours.
+4. Watch `fusionauth`'s **Deployments** tab → **Deploy Logs**: FusionAuth enters maintenance mode, creates its
+   schema, then logs the kickstart requests. The deploy goes healthy when `/api/status` answers. If the very
+   first boot loses the race with `fusionauth-postgres` provisioning and fails on the database connection,
+   redeploy it — kickstart has not run against anything yet.
+5. Verify from a terminal:
 
    ```
-   DB_PASSWORD=${{agency-postgres.PGPASSWORD}}
-   DB_URL=jdbc:postgresql://${{agency-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{agency-postgres.PGDATABASE}}
-   DB_USERNAME=${{agency-postgres.PGUSER}}
-   FUSIONAUTH_APIKEY=${{fusionauth.KICKSTART_API_KEY}}
-   FUSIONAUTH_BASEURL=https://auth.theagencyhq.dev
-   FUSIONAUTH_CLIENTID=7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742
-   FUSIONAUTH_CLIENTSECRET=${{fusionauth.KICKSTART_AGENCY_CLIENT_SECRET}}
-   FUSIONAUTH_HANDLERCLIENTID=fa83bc7c-f1c5-48af-8ecb-6c09cf766d73
-   FUSIONAUTH_HANDLERCLIENTSECRET=${{fusionauth.KICKSTART_HANDLER_CLIENT_SECRET}}
-   FUSIONAUTH_ISSUER=https://auth.theagencyhq.dev
-   GITHUB_APPNAME=<slug from 10.5>
-   GITHUB_CLIENTID=<from 10.5>
-   GITHUB_CLIENTSECRET=<from 10.5>
-   RUNTIME_MODE=production
-   WEB_COOKIEENCRYPTIONKEY=<generated>
+   curl -fs https://auth.theagencyhq.dev/.well-known/openid-configuration
    ```
 
-3. **Settings** → **Networking** → **Public Networking** → **+ Custom Domain** → `app.theagencyhq.dev`, target
-   port **8080**. Add the CNAME and TXT records at the DNS provider, same as 10.3 step 6.
-4. Deploy the staged changes. There is no image yet, so nothing runs — the variables and domain are simply saved,
-   waiting for 10.7.
+   must report `"issuer":"https://auth.theagencyhq.dev"`. If it still says `localhost`, kickstart ran with the
+   wrong environment — see the warning in 10.4.
+
+### 10.6 Tenant SMTP (§7)
+
+1. Sign in at `https://auth.theagencyhq.dev` as `admin@theagencyhq.dev` / `KICKSTART_ADMIN_PASSWORD`.
+2. **Tenants** → **Default** → edit → **Email** tab → fill in the SMTP host, port, username, password, and
+   security setting from the chosen provider (Postmark, Resend, SES — the account and its sending domain
+   verification for `theagencyhq.dev` are provider-side work, done first).
+3. Use **Send test email** on the same screen, and confirm it arrives.
 
 ### 10.7 First deploy from the CLI
 
 From the repo root on the deploying machine:
 
 ```
-railway link      # pick the workspace, the the-agency project, and the production environment
 railway service   # pick the the-agency service — this is what `railway up` targets from now on
 latte deploy      # bundle + railway up --no-gitignore --ci
 ```
 
-The link is stored per-directory, so `railway link`/`railway service` are one-time per machine. `latte deploy`
-streams the Docker build; the dashboard's **Deployments** tab shows the healthcheck on `/health` gating the
-cutover, and the app's boot log shows the migrations applying.
+`railway service` is one-time per machine, like the link in 10.2. `latte deploy` streams the Docker build; the
+dashboard's **Deployments** tab shows the healthcheck on `/health` gating the cutover, and the app's boot log
+shows the migrations applying.
 
 ### 10.8 Smoke test
 
 1. `curl -fs https://app.theagencyhq.dev/health` → `OK`.
 2. `https://app.theagencyhq.dev/` in a browser → redirects to the FusionAuth login page, themed like the app.
-3. Sign in as `admin@theagencyhq.dev`. Create an Organization, connect a repository (the GitHub App from 10.5
+3. Sign in as `admin@theagencyhq.dev`. Create an Organization, connect a repository (the GitHub App from 10.3
    installs on it along the way), and confirm a Brief builds — the full §2 workflow of the GitHub Brief sources
    design, now against production.
-4. Invite a member by email and confirm the invitation arrives (proves 10.4).
+4. Invite a member by email and confirm the invitation arrives (proves 10.6).
 5. On both Postgres services, open the **Backups** tab and confirm scheduled backups are on (§9).

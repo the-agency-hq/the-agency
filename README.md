@@ -117,8 +117,10 @@ Production runs on Railway: the app at `https://app.theagencyhq.dev`, FusionAuth
 and a Railway PostgreSQL for each. The build happens on the developer machine — `latte deploy` assembles a
 self-contained runtime bundle (`latte bundle` → `build/bundle`) and ships it with `railway up`; Railway builds the
 runtime-only `Dockerfile` from the upload. FusionAuth deploys from this repo too (`src/main/fusionauth/Dockerfile`
-bakes the kickstart into the image), and all production configuration is Railway variables. The topology, variable
-tables, and first-deploy runbook are in `docs/design/2026-08-18-railway-deploy-design.md`.
+bakes the kickstart into the image). The whole Railway project — services, databases, domains, and variables — is
+declared in `.railway/railway.ts` (Railway Infrastructure as Code) and applied with `railway config apply`; secrets
+live only in Railway shared variables. The topology and first-deploy runbook are in
+`docs/design/2026-08-18-railway-deploy-design.md`.
 
 ## Design documents
 

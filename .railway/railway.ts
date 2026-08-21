@@ -2,7 +2,7 @@
  * Copyright (c) 2026 The Agency HQ
  * SPDX-License-Identifier: MIT
  */
-import { defineRailway, github, postgres, project, service } from "railway/iac";
+import { createRailwayContext, defineRailway, github, postgres, project, service } from "railway/iac";
 
 // The Railway deployment, per docs/design/2026-08-18-railway-deploy-design.md §8.
 // Literals are facts fixed by the design; everything minted during the first deploy
@@ -14,6 +14,8 @@ import { defineRailway, github, postgres, project, service } from "railway/iac";
 const REGION = "us-east4-eqdc4a";
 
 export default defineRailway((ctx) => {
+  // CLI runners before 5.43 invoke this program without a context; build one so `shared` always exists.
+  const { shared } = ctx?.shared ? ctx : createRailwayContext();
   const agencyPostgres = postgres("agency-postgres", { region: REGION });
   const fusionauthPostgres = postgres("fusionauth-postgres", { region: REGION });
 
@@ -29,23 +31,23 @@ export default defineRailway((ctx) => {
     },
     domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
     env: {
-      DATABASE_PASSWORD: ctx.shared.FUSIONAUTH_DATABASE_PASSWORD,
+      DATABASE_PASSWORD: shared.FUSIONAUTH_DATABASE_PASSWORD,
       DATABASE_ROOT_PASSWORD: fusionauthPostgres.env.PGPASSWORD,
       DATABASE_ROOT_USERNAME: fusionauthPostgres.env.PGUSER,
       DATABASE_URL: "jdbc:postgresql://${{fusionauth-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/fusionauth",
       DATABASE_USERNAME: "fusionauth",
       FUSIONAUTH_APP_KICKSTART_FILE: "/usr/local/fusionauth/kickstart/kickstart.json",
-      FUSIONAUTH_APP_LICENSE_KEY: ctx.shared.FUSIONAUTH_APP_LICENSE_KEY,
+      FUSIONAUTH_APP_LICENSE_KEY: shared.FUSIONAUTH_APP_LICENSE_KEY,
       FUSIONAUTH_APP_MEMORY: "512M",
       FUSIONAUTH_APP_RUNTIME_MODE: "production",
       FUSIONAUTH_APP_THEME_APP_URL: "https://app.theagencyhq.dev",
       FUSIONAUTH_APP_THEME_CSS_URL: "https://app.theagencyhq.dev/static/css/app.css",
       FUSIONAUTH_APP_URL: "https://auth.theagencyhq.dev",
-      KICKSTART_ADMIN_PASSWORD: ctx.shared.FUSIONAUTH_ADMIN_PASSWORD,
-      KICKSTART_AGENCY_CLIENT_SECRET: ctx.shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
-      KICKSTART_API_KEY: ctx.shared.FUSIONAUTH_API_KEY,
-      KICKSTART_HANDLER_CLIENT_SECRET: ctx.shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
-      KICKSTART_ORDINARY_PASSWORD: ctx.shared.FUSIONAUTH_ORDINARY_PASSWORD,
+      KICKSTART_ADMIN_PASSWORD: shared.FUSIONAUTH_ADMIN_PASSWORD,
+      KICKSTART_AGENCY_CLIENT_SECRET: shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
+      KICKSTART_API_KEY: shared.FUSIONAUTH_API_KEY,
+      KICKSTART_HANDLER_CLIENT_SECRET: shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
+      KICKSTART_ORDINARY_PASSWORD: shared.FUSIONAUTH_ORDINARY_PASSWORD,
       KICKSTART_TENANT_ISSUER: "https://auth.theagencyhq.dev",
       SEARCH_TYPE: "database",
     },
@@ -68,18 +70,18 @@ export default defineRailway((ctx) => {
       DB_PASSWORD: agencyPostgres.env.PGPASSWORD,
       DB_URL: "jdbc:postgresql://${{agency-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{agency-postgres.PGDATABASE}}",
       DB_USERNAME: agencyPostgres.env.PGUSER,
-      FUSIONAUTH_APIKEY: ctx.shared.FUSIONAUTH_API_KEY,
+      FUSIONAUTH_APIKEY: shared.FUSIONAUTH_API_KEY,
       FUSIONAUTH_BASEURL: "https://auth.theagencyhq.dev",
       FUSIONAUTH_CLIENTID: "7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742",
-      FUSIONAUTH_CLIENTSECRET: ctx.shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
+      FUSIONAUTH_CLIENTSECRET: shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
       FUSIONAUTH_HANDLERCLIENTID: "fa83bc7c-f1c5-48af-8ecb-6c09cf766d73",
-      FUSIONAUTH_HANDLERCLIENTSECRET: ctx.shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
+      FUSIONAUTH_HANDLERCLIENTSECRET: shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
       FUSIONAUTH_ISSUER: "https://auth.theagencyhq.dev",
-      GITHUB_APPNAME: ctx.shared.GITHUB_APPNAME,
-      GITHUB_CLIENTID: ctx.shared.GITHUB_CLIENTID,
-      GITHUB_CLIENTSECRET: ctx.shared.GITHUB_CLIENTSECRET,
+      GITHUB_APPNAME: shared.GITHUB_APPNAME,
+      GITHUB_CLIENTID: shared.GITHUB_CLIENTID,
+      GITHUB_CLIENTSECRET: shared.GITHUB_CLIENTSECRET,
       RUNTIME_MODE: "production",
-      WEB_COOKIEENCRYPTIONKEY: ctx.shared.WEB_COOKIEENCRYPTIONKEY,
+      WEB_COOKIEENCRYPTIONKEY: shared.WEB_COOKIEENCRYPTIONKEY,
     },
     healthcheck: "/health",
     replicas: 1,

@@ -210,10 +210,10 @@ via Tailwind), and the Railway CLI is the file's only consumer — nothing about
 **Where values live.** One rule decides what is a literal in the file and what is not: facts fixed by this
 design (URLs, application UUIDs, runtime modes, memory) are literals; anything minted during the first deploy
 (the §10.1 secrets, the GitHub App identity, the license key) is a Railway **shared variable**, set once at the
-project level and referenced from the file as `ctx.shared.*`. The file is therefore committable as-is — it
-names every secret but contains none — and each secret still lives in exactly one place: `KICKSTART_API_KEY` is
-one shared variable that the `fusionauth` service exposes to kickstart and the `the-agency` service reads as
-`FUSIONAUTH_APIKEY`. Database credentials are typed references (`agencyPostgres.env.PGPASSWORD`), which also
+project level and referenced from the file as `shared.*`. The file is therefore committable as-is — it
+names every secret but contains none — and each secret still lives in exactly one place: `FUSIONAUTH_API_KEY`
+is one shared variable that the `fusionauth` service exposes to kickstart as `KICKSTART_API_KEY` and the
+`the-agency` service reads as `FUSIONAUTH_APIKEY`. Database credentials are typed references (`agencyPostgres.env.PGPASSWORD`), which also
 records a dependency edge from the service to its database; only the composed JDBC URLs fall back to Railway's
 `${{service.VAR}}` template syntax as literal strings, because a typed reference cannot be embedded in a larger
 string. Either way the file holds references, not values.
@@ -225,12 +225,14 @@ The file is `.railway/railway.ts` in the repository — the listing below is the
 header:
 
 ```ts
-import { defineRailway, github, postgres, project, service } from "railway/iac";
+import { createRailwayContext, defineRailway, github, postgres, project, service } from "railway/iac";
 
 // Every resource is pinned to US East (Virginia); the other US region is us-west2 (California).
 const REGION = "us-east4-eqdc4a";
 
 export default defineRailway((ctx) => {
+  // CLI runners before 5.43 invoke this program without a context; build one so `shared` always exists.
+  const { shared } = ctx?.shared ? ctx : createRailwayContext();
   const agencyPostgres = postgres("agency-postgres", { region: REGION });
   const fusionauthPostgres = postgres("fusionauth-postgres", { region: REGION });
 
@@ -246,23 +248,23 @@ export default defineRailway((ctx) => {
     },
     domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
     env: {
-      DATABASE_PASSWORD: ctx.shared.FUSIONAUTH_DATABASE_PASSWORD,
+      DATABASE_PASSWORD: shared.FUSIONAUTH_DATABASE_PASSWORD,
       DATABASE_ROOT_PASSWORD: fusionauthPostgres.env.PGPASSWORD,
       DATABASE_ROOT_USERNAME: fusionauthPostgres.env.PGUSER,
       DATABASE_URL: "jdbc:postgresql://${{fusionauth-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/fusionauth",
       DATABASE_USERNAME: "fusionauth",
       FUSIONAUTH_APP_KICKSTART_FILE: "/usr/local/fusionauth/kickstart/kickstart.json",
-      FUSIONAUTH_APP_LICENSE_KEY: ctx.shared.FUSIONAUTH_APP_LICENSE_KEY,
+      FUSIONAUTH_APP_LICENSE_KEY: shared.FUSIONAUTH_APP_LICENSE_KEY,
       FUSIONAUTH_APP_MEMORY: "512M",
       FUSIONAUTH_APP_RUNTIME_MODE: "production",
       FUSIONAUTH_APP_THEME_APP_URL: "https://app.theagencyhq.dev",
       FUSIONAUTH_APP_THEME_CSS_URL: "https://app.theagencyhq.dev/static/css/app.css",
       FUSIONAUTH_APP_URL: "https://auth.theagencyhq.dev",
-      KICKSTART_ADMIN_PASSWORD: ctx.shared.FUSIONAUTH_ADMIN_PASSWORD,
-      KICKSTART_AGENCY_CLIENT_SECRET: ctx.shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
-      KICKSTART_API_KEY: ctx.shared.FUSIONAUTH_API_KEY,
-      KICKSTART_HANDLER_CLIENT_SECRET: ctx.shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
-      KICKSTART_ORDINARY_PASSWORD: ctx.shared.FUSIONAUTH_ORDINARY_PASSWORD,
+      KICKSTART_ADMIN_PASSWORD: shared.FUSIONAUTH_ADMIN_PASSWORD,
+      KICKSTART_AGENCY_CLIENT_SECRET: shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
+      KICKSTART_API_KEY: shared.FUSIONAUTH_API_KEY,
+      KICKSTART_HANDLER_CLIENT_SECRET: shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
+      KICKSTART_ORDINARY_PASSWORD: shared.FUSIONAUTH_ORDINARY_PASSWORD,
       KICKSTART_TENANT_ISSUER: "https://auth.theagencyhq.dev",
       SEARCH_TYPE: "database",
     },
@@ -285,18 +287,18 @@ export default defineRailway((ctx) => {
       DB_PASSWORD: agencyPostgres.env.PGPASSWORD,
       DB_URL: "jdbc:postgresql://${{agency-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{agency-postgres.PGDATABASE}}",
       DB_USERNAME: agencyPostgres.env.PGUSER,
-      FUSIONAUTH_APIKEY: ctx.shared.FUSIONAUTH_API_KEY,
+      FUSIONAUTH_APIKEY: shared.FUSIONAUTH_API_KEY,
       FUSIONAUTH_BASEURL: "https://auth.theagencyhq.dev",
       FUSIONAUTH_CLIENTID: "7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742",
-      FUSIONAUTH_CLIENTSECRET: ctx.shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
+      FUSIONAUTH_CLIENTSECRET: shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
       FUSIONAUTH_HANDLERCLIENTID: "fa83bc7c-f1c5-48af-8ecb-6c09cf766d73",
-      FUSIONAUTH_HANDLERCLIENTSECRET: ctx.shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
+      FUSIONAUTH_HANDLERCLIENTSECRET: shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
       FUSIONAUTH_ISSUER: "https://auth.theagencyhq.dev",
-      GITHUB_APPNAME: ctx.shared.GITHUB_APPNAME,
-      GITHUB_CLIENTID: ctx.shared.GITHUB_CLIENTID,
-      GITHUB_CLIENTSECRET: ctx.shared.GITHUB_CLIENTSECRET,
+      GITHUB_APPNAME: shared.GITHUB_APPNAME,
+      GITHUB_CLIENTID: shared.GITHUB_CLIENTID,
+      GITHUB_CLIENTSECRET: shared.GITHUB_CLIENTSECRET,
       RUNTIME_MODE: "production",
-      WEB_COOKIEENCRYPTIONKEY: ctx.shared.WEB_COOKIEENCRYPTIONKEY,
+      WEB_COOKIEENCRYPTIONKEY: shared.WEB_COOKIEENCRYPTIONKEY,
     },
     healthcheck: "/health",
     replicas: 1,
@@ -359,12 +361,12 @@ Steps run in order. Railway UI references are as of August 2026; the dashboard i
 
    | Secret                            | Generate with                                                                                        |
    |-----------------------------------|------------------------------------------------------------------------------------------------------|
+   | `FUSIONAUTH_ADMIN_PASSWORD`       | `openssl rand -base64 18`                                                                            |
+   | `FUSIONAUTH_AGENCY_CLIENT_SECRET` | `openssl rand -base64 32`                                                                            |
+   | `FUSIONAUTH_API_KEY`              | `uuidgen \| tr 'A-Z' 'a-z'`                                                                          |
    | `FUSIONAUTH_DATABASE_PASSWORD`    | `openssl rand -hex 24`                                                                               |
-   | `KICKSTART_ADMIN_PASSWORD`        | `openssl rand -base64 18`                                                                            |
-   | `KICKSTART_AGENCY_CLIENT_SECRET`  | `openssl rand -base64 32`                                                                            |
-   | `KICKSTART_API_KEY`               | `uuidgen \| tr 'A-Z' 'a-z'`                                                                          |
-   | `KICKSTART_HANDLER_CLIENT_SECRET` | `openssl rand -base64 32`                                                                            |
-   | `KICKSTART_ORDINARY_PASSWORD`     | `openssl rand -base64 18`                                                                            |
+   | `FUSIONAUTH_HANDLER_CLIENT_SECRET`| `openssl rand -base64 32`                                                                            |
+   | `FUSIONAUTH_ORDINARY_PASSWORD`    | `openssl rand -base64 18`                                                                            |
    | `WEB_COOKIEENCRYPTIONKEY`         | `openssl rand -base64 32` (must be exactly 32 bytes of base64 — `Cookies.encryptionKeys` decodes it) |
 
 ### 10.2 Project and link
@@ -390,7 +392,7 @@ Per `README.md`'s requirements, on github.com: **Settings** → **Developer sett
 
 ### 10.4 Shared variables
 
-Project **Settings** → **Shared Variables**, production environment — add every value the `ctx.shared.*`
+Project **Settings** → **Shared Variables**, production environment — add every value the `shared.*`
 references in `railway.ts` name, filling in the generated values from 10.1 and the GitHub App values from 10.3:
 
 ```
@@ -408,8 +410,8 @@ WEB_COOKIEENCRYPTIONKEY=<generated>
 ```
 
 **All of it goes in before the first apply.** Kickstart runs exactly once, against the empty database, with
-whatever environment the container has at that moment — a `fusionauth` service created while a `KICKSTART_*`
-shared variable is missing would provision empty secrets, and the only recovery is dropping the `fusionauth`
+whatever environment the container has at that moment — a `fusionauth` service created while one of its shared
+variables is missing would provision empty secrets, and the only recovery is dropping the `fusionauth`
 database. With every shared variable in place first, 10.5's apply creates the service with its complete
 environment and that state is unreachable (§8).
 
@@ -446,7 +448,7 @@ environment and that state is unreachable (§8).
 
 ### 10.6 Tenant SMTP (§7)
 
-1. Sign in at `https://auth.theagencyhq.dev` as `admin@theagencyhq.dev` / `KICKSTART_ADMIN_PASSWORD`.
+1. Sign in at `https://auth.theagencyhq.dev` as `admin@theagencyhq.dev` / `FUSIONAUTH_ADMIN_PASSWORD`.
 2. **Tenants** → **Default** → edit → **Email** tab → fill in the SMTP host, port, username, password, and
    security setting from the chosen provider (Postmark, Resend, SES — the account and its sending domain
    verification for `theagencyhq.dev` are provider-side work, done first).

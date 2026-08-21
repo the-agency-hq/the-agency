@@ -227,9 +227,12 @@ header:
 ```ts
 import { defineRailway, github, postgres, project, service } from "railway/iac";
 
+// Every resource is pinned to US East (Virginia); the other US region is us-west2 (California).
+const REGION = "us-east4-eqdc4a";
+
 export default defineRailway((ctx) => {
-  const agencyPostgres = postgres("agency-postgres");
-  const fusionauthPostgres = postgres("fusionauth-postgres");
+  const agencyPostgres = postgres("agency-postgres", { region: REGION });
+  const fusionauthPostgres = postgres("fusionauth-postgres", { region: REGION });
 
   const fusionauth = service("fusionauth", {
     build: {
@@ -238,6 +241,7 @@ export default defineRailway((ctx) => {
       watchPatterns: ["/src/main/fusionauth/**"],
     },
     deploy: {
+      region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
     domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
@@ -273,6 +277,7 @@ export default defineRailway((ctx) => {
       builder: "DOCKERFILE",
     },
     deploy: {
+      region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
     domains: [{ domain: "app.theagencyhq.dev", port: 8080 }],
@@ -297,7 +302,7 @@ export default defineRailway((ctx) => {
     replicas: 1,
   });
 
-  return project("the-agency", {
+  return project("The Agency HQ", {
     resources: [agencyPostgres, fusionauthPostgres, fusionauth, theAgency],
   });
 });
@@ -308,6 +313,11 @@ Notes on the file:
 - **The `build` and `deploy` blocks carry everything `railway.json` used to** — Dockerfile builder, restart on
   failure — plus the `fusionauth` watch paths, which under config-as-code were a dashboard-only setting. The
   `healthcheck` and `replicas` shorthands merge into the same deploy config.
+- **Every resource is pinned to `us-east4-eqdc4a` (US East, Virginia)** through the one `REGION` constant —
+  services via `deploy.region`, databases via the `postgres()` config — rather than inheriting the deploying
+  account's preferred-region setting. Both databases and their volumes land beside the services they serve.
+- **The `port` on each domain is the container target port** (where the process listens: FusionAuth on 9011,
+  the app on 8080), not the public port — both domains are served on 443, HTTPS terminating at the edge (§2).
 - The `fusionauth` env is the compose stack's variables minus the compose-only ones (`FUSIONAUTH_LOCAL_*`,
   `OPENSEARCH_JAVA_OPTS`, `SEARCH_SERVERS`), with `SEARCH_TYPE=database`, production mode, the production theme
   URLs, and the seven `KICKSTART_*` values from §7.
@@ -342,7 +352,8 @@ Steps run in order. Railway UI references are as of August 2026; the dashboard i
    `brew install railway` (or `brew upgrade railway`), then `railway login` (opens the browser).
 3. The IaC SDK: `cd .railway && npm install` — installs the `railway` npm package that `railway.ts` imports
    (§8). Node and npm are already on the machine as build prerequisites.
-4. DNS access for `theagencyhq.dev` — two subdomains get CNAME + TXT records.
+4. Access to the Cloudflare account holding the `theagencyhq.dev` zone — two subdomains get proxied CNAME + TXT
+   records (10.5 step 3).
 5. Generate the production secrets once, locally, and keep them in a password manager until they are pasted into
    Railway in step 10.4:
 
@@ -358,9 +369,11 @@ Steps run in order. Railway UI references are as of August 2026; the dashboard i
 
 ### 10.2 Project and link
 
-1. On the Railway dashboard, click **New Project**. Name it `the-agency`. If the workspace has never connected
-   GitHub, install Railway's GitHub App on the org now and grant it this repository — the `github()` source in
-   `railway.ts` needs it before the apply in 10.5.
+1. On the Railway dashboard, click **New Project**. Name it `The Agency HQ` — the project name is a display
+   name; `railway config apply` targets the linked project regardless, unlike **service** names, which the
+   `${{...}}` variable references resolve by and which must match `railway.ts` exactly. If the workspace has
+   never connected GitHub, install Railway's GitHub App on the org now and grant it this repository — the
+   `github()` source in `railway.ts` needs it before the apply in 10.5.
 2. From the repo root: `railway link` — pick the workspace, the `the-agency` project, and the production
    environment. The link is stored per-directory and is what `railway config` and `railway up` operate on.
 
@@ -406,10 +419,18 @@ environment and that state is unreachable (§8).
    `the-agency`, both custom domains, and the §8 variables.
 2. `railway config apply`. Railway creates everything; `fusionauth` starts building from the GitHub repo
    immediately, while `the-agency` has no source and sits idle until 10.7.
-3. DNS: each service's **Settings** → **Networking** shows a **CNAME** record and a **TXT** record for its
-   custom domain — add **both pairs** at the DNS provider exactly as shown (the TXT record verifies ownership;
-   without it requests 404 even after the CNAME resolves). Verification shows as a green checkmark; propagation
-   is usually minutes, up to 72 hours.
+3. DNS, in the Cloudflare dashboard for the `theagencyhq.dev` zone. Each Railway service's **Settings** →
+   **Networking** shows a **CNAME** record and a **TXT** record for its custom domain; in Cloudflare **DNS** →
+   **Records**, per service:
+   - Add the CNAME (`app` → the `the-agency` target, `auth` → the `fusionauth` target, each something like
+     `xxxxxx.up.railway.app`) with **Proxy status: Proxied** (orange cloud) — Railway requires the proxy: "If
+     proxying is not enabled, Cloudflare will not associate the domain with your Railway project."
+   - Add the TXT record exactly as shown — without it, requests 404 even after the CNAME resolves.
+
+   Then, once for the zone: **SSL/TLS** → **Overview** → encryption mode **Full** — not Flexible (redirect
+   loops) and not Full (strict), which Railway warns "will not work as intended"; and **SSL/TLS** →
+   **Edge Certificates** → **Universal SSL** on (the default). Railway shows "Cloudflare proxy detected" with a
+   green checkmark when a domain verifies; propagation is usually minutes, up to 72 hours.
 4. Watch `fusionauth`'s **Deployments** tab → **Deploy Logs**: FusionAuth enters maintenance mode, creates its
    schema, then logs the kickstart requests. The deploy goes healthy when `/api/status` answers. If the very
    first boot loses the race with `fusionauth-postgres` provisioning and fails on the database connection,

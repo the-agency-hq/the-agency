@@ -10,9 +10,12 @@ import { defineRailway, github, postgres, project, service } from "railway/iac";
 // dashboard before the first `railway config apply` — the file names secrets, never
 // contains one. Composed JDBC URLs use Railway's `${{...}}` template syntax because a
 // typed reference cannot be embedded in a larger string.
+// Every resource is pinned to US East (Virginia); the other US region is us-west2 (California).
+const REGION = "us-east4-eqdc4a";
+
 export default defineRailway((ctx) => {
-  const agencyPostgres = postgres("agency-postgres");
-  const fusionauthPostgres = postgres("fusionauth-postgres");
+  const agencyPostgres = postgres("agency-postgres", { region: REGION });
+  const fusionauthPostgres = postgres("fusionauth-postgres", { region: REGION });
 
   const fusionauth = service("fusionauth", {
     build: {
@@ -21,6 +24,7 @@ export default defineRailway((ctx) => {
       watchPatterns: ["/src/main/fusionauth/**"],
     },
     deploy: {
+      region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
     domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
@@ -56,6 +60,7 @@ export default defineRailway((ctx) => {
       builder: "DOCKERFILE",
     },
     deploy: {
+      region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
     domains: [{ domain: "app.theagencyhq.dev", port: 8080 }],
@@ -80,7 +85,7 @@ export default defineRailway((ctx) => {
     replicas: 1,
   });
 
-  return project("the-agency", {
+  return project("The Agency HQ", {
     resources: [agencyPostgres, fusionauthPostgres, fusionauth, theAgency],
   });
 });

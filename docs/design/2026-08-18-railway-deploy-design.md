@@ -258,11 +258,11 @@ export default defineRailway((ctx) => {
       FUSIONAUTH_APP_THEME_APP_URL: "https://app.theagencyhq.dev",
       FUSIONAUTH_APP_THEME_CSS_URL: "https://app.theagencyhq.dev/static/css/app.css",
       FUSIONAUTH_APP_URL: "https://auth.theagencyhq.dev",
-      KICKSTART_ADMIN_PASSWORD: ctx.shared.KICKSTART_ADMIN_PASSWORD,
-      KICKSTART_AGENCY_CLIENT_SECRET: ctx.shared.KICKSTART_AGENCY_CLIENT_SECRET,
-      KICKSTART_API_KEY: ctx.shared.KICKSTART_API_KEY,
-      KICKSTART_HANDLER_CLIENT_SECRET: ctx.shared.KICKSTART_HANDLER_CLIENT_SECRET,
-      KICKSTART_ORDINARY_PASSWORD: ctx.shared.KICKSTART_ORDINARY_PASSWORD,
+      KICKSTART_ADMIN_PASSWORD: ctx.shared.FUSIONAUTH_ADMIN_PASSWORD,
+      KICKSTART_AGENCY_CLIENT_SECRET: ctx.shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
+      KICKSTART_API_KEY: ctx.shared.FUSIONAUTH_API_KEY,
+      KICKSTART_HANDLER_CLIENT_SECRET: ctx.shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
+      KICKSTART_ORDINARY_PASSWORD: ctx.shared.FUSIONAUTH_ORDINARY_PASSWORD,
       KICKSTART_TENANT_ISSUER: "https://auth.theagencyhq.dev",
       SEARCH_TYPE: "database",
     },
@@ -285,12 +285,12 @@ export default defineRailway((ctx) => {
       DB_PASSWORD: agencyPostgres.env.PGPASSWORD,
       DB_URL: "jdbc:postgresql://${{agency-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{agency-postgres.PGDATABASE}}",
       DB_USERNAME: agencyPostgres.env.PGUSER,
-      FUSIONAUTH_APIKEY: ctx.shared.KICKSTART_API_KEY,
+      FUSIONAUTH_APIKEY: ctx.shared.FUSIONAUTH_API_KEY,
       FUSIONAUTH_BASEURL: "https://auth.theagencyhq.dev",
       FUSIONAUTH_CLIENTID: "7e1c9a54-0f8b-4a2e-9c6d-3b5f81d0a742",
-      FUSIONAUTH_CLIENTSECRET: ctx.shared.KICKSTART_AGENCY_CLIENT_SECRET,
+      FUSIONAUTH_CLIENTSECRET: ctx.shared.FUSIONAUTH_AGENCY_CLIENT_SECRET,
       FUSIONAUTH_HANDLERCLIENTID: "fa83bc7c-f1c5-48af-8ecb-6c09cf766d73",
-      FUSIONAUTH_HANDLERCLIENTSECRET: ctx.shared.KICKSTART_HANDLER_CLIENT_SECRET,
+      FUSIONAUTH_HANDLERCLIENTSECRET: ctx.shared.FUSIONAUTH_HANDLER_CLIENT_SECRET,
       FUSIONAUTH_ISSUER: "https://auth.theagencyhq.dev",
       GITHUB_APPNAME: ctx.shared.GITHUB_APPNAME,
       GITHUB_CLIENTID: ctx.shared.GITHUB_CLIENTID,
@@ -394,16 +394,16 @@ Project **Settings** → **Shared Variables**, production environment — add ev
 references in `railway.ts` name, filling in the generated values from 10.1 and the GitHub App values from 10.3:
 
 ```
+FUSIONAUTH_ADMIN_PASSWORD=<generated>
+FUSIONAUTH_AGENCY_CLIENT_SECRET=<generated>
+FUSIONAUTH_API_KEY=<generated>
 FUSIONAUTH_APP_LICENSE_KEY=<license key, or any placeholder string without one>
 FUSIONAUTH_DATABASE_PASSWORD=<generated>
+FUSIONAUTH_HANDLER_CLIENT_SECRET=<generated>
+FUSIONAUTH_ORDINARY_PASSWORD=<generated>
 GITHUB_APPNAME=<slug from 10.3>
 GITHUB_CLIENTID=<from 10.3>
 GITHUB_CLIENTSECRET=<from 10.3>
-KICKSTART_ADMIN_PASSWORD=<generated>
-KICKSTART_AGENCY_CLIENT_SECRET=<generated>
-KICKSTART_API_KEY=<generated>
-KICKSTART_HANDLER_CLIENT_SECRET=<generated>
-KICKSTART_ORDINARY_PASSWORD=<generated>
 WEB_COOKIEENCRYPTIONKEY=<generated>
 ```
 

@@ -29,7 +29,9 @@ export default defineRailway((ctx) => {
       region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
-    domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
+    // First deploy only: Railway rejects custom-domain *registration* from configuration. Keep this
+    // commented until the domain is registered in the dashboard (design §10.5), then restore it.
+    // domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
     env: {
       DATABASE_PASSWORD: shared.FUSIONAUTH_DATABASE_PASSWORD,
       DATABASE_ROOT_PASSWORD: fusionauthPostgres.env.PGPASSWORD,
@@ -65,7 +67,9 @@ export default defineRailway((ctx) => {
       region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
-    domains: [{ domain: "app.theagencyhq.dev", port: 8080 }],
+    // First deploy only: Railway rejects custom-domain *registration* from configuration. Keep this
+    // commented until the domain is registered in the dashboard (design §10.5), then restore it.
+    // domains: [{ domain: "app.theagencyhq.dev", port: 8080 }],
     env: {
       DB_PASSWORD: agencyPostgres.env.PGPASSWORD,
       DB_URL: "jdbc:postgresql://${{agency-postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{agency-postgres.PGDATABASE}}",

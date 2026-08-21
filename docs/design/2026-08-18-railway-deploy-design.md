@@ -318,8 +318,12 @@ Notes on the file:
 - **Every resource is pinned to `us-east4-eqdc4a` (US East, Virginia)** through the one `REGION` constant —
   services via `deploy.region`, databases via the `postgres()` config — rather than inheriting the deploying
   account's preferred-region setting. Both databases and their volumes land beside the services they serve.
-- **The `port` on each domain is the container target port** (where the process listens: FusionAuth on 9011,
-  the app on 8080), not the public port — both domains are served on 443, HTTPS terminating at the edge (§2).
+- **Custom domains are declared in the file but registered in the dashboard.** Railway rejects custom-domain
+  registration from configuration, so the first deploy comments the `domains:` lines out, registers both
+  domains by hand, and then restores the lines (§10.5) — from then on the file's entries reconcile the existing
+  domains. The `port` on each domain is the container target port (where the process listens: FusionAuth on
+  9011, the app on 8080), not the public port — both domains are served on 443, HTTPS terminating at the edge
+  (§2).
 - The `fusionauth` env is the compose stack's variables minus the compose-only ones (`FUSIONAUTH_LOCAL_*`,
   `OPENSEARCH_JAVA_OPTS`, `SEARCH_SERVERS`), with `SEARCH_TYPE=database`, production mode, the production theme
   URLs, and the seven `KICKSTART_*` values from §7.
@@ -355,7 +359,7 @@ Steps run in order. Railway UI references are as of August 2026; the dashboard i
 3. The IaC SDK: `cd .railway && npm install` — installs the `railway` npm package that `railway.ts` imports
    (§8). Node and npm are already on the machine as build prerequisites.
 4. Access to the Cloudflare account holding the `theagencyhq.dev` zone — two subdomains get proxied CNAME + TXT
-   records (10.5 step 3).
+   records (10.5 step 6).
 5. Generate the production secrets once, locally, and keep them in a password manager until they are pasted into
    Railway in step 10.4:
 
@@ -417,11 +421,20 @@ environment and that state is unreachable (§8).
 
 ### 10.5 Apply the infrastructure
 
-1. From the repo root: `railway config plan`. Review the preview: two Postgres services, `fusionauth`,
-   `the-agency`, both custom domains, and the §8 variables.
-2. `railway config apply`. Railway creates everything; `fusionauth` starts building from the GitHub repo
+1. For the first apply, the two `domains:` lines in `railway.ts` must be commented out — Railway refuses
+   custom-domain **registration** from configuration (the plan errors with "Add <domain> in the dashboard").
+   They come back in step 5.
+2. From the repo root: `railway config plan`. Review the preview: two Postgres services, `fusionauth`,
+   `the-agency`, and the §8 variables.
+3. `railway config apply`. Railway creates everything; `fusionauth` starts building from the GitHub repo
    immediately, while `the-agency` has no source and sits idle until 10.7.
-3. DNS, in the Cloudflare dashboard for the `theagencyhq.dev` zone. Each Railway service's **Settings** →
+4. Register the domains in the dashboard: `fusionauth` → **Settings** → **Networking** → **+ Custom Domain** →
+   `auth.theagencyhq.dev`, target port **9011**; `the-agency` → the same → `app.theagencyhq.dev`, target port
+   **8080**.
+5. Restore the `domains:` lines in `railway.ts` and run `railway config plan` — it should report no domain
+   changes, proving the file and the project agree. From here on the file declares the domains, so future
+   applies reconcile them instead of treating them as drift.
+6. DNS, in the Cloudflare dashboard for the `theagencyhq.dev` zone. Each Railway service's **Settings** →
    **Networking** shows a **CNAME** record and a **TXT** record for its custom domain; in Cloudflare **DNS** →
    **Records**, per service:
    - Add the CNAME (`app` → the `the-agency` target, `auth` → the `fusionauth` target, each something like
@@ -433,11 +446,11 @@ environment and that state is unreachable (§8).
    loops) and not Full (strict), which Railway warns "will not work as intended"; and **SSL/TLS** →
    **Edge Certificates** → **Universal SSL** on (the default). Railway shows "Cloudflare proxy detected" with a
    green checkmark when a domain verifies; propagation is usually minutes, up to 72 hours.
-4. Watch `fusionauth`'s **Deployments** tab → **Deploy Logs**: FusionAuth enters maintenance mode, creates its
+7. Watch `fusionauth`'s **Deployments** tab → **Deploy Logs**: FusionAuth enters maintenance mode, creates its
    schema, then logs the kickstart requests. The deploy goes healthy when `/api/status` answers. If the very
    first boot loses the race with `fusionauth-postgres` provisioning and fails on the database connection,
    redeploy it — kickstart has not run against anything yet.
-5. Verify from a terminal:
+8. Verify from a terminal:
 
    ```
    curl -fs https://auth.theagencyhq.dev/.well-known/openid-configuration

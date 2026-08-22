@@ -149,7 +149,11 @@ Differences from the compose stack, all environment-driven:
 - **No Mailcatcher** — §7 covers production email.
 - **No volumes** — FusionAuth's state lives in its database; the config volume in compose only caches what the
   environment variables already say.
-- **`FUSIONAUTH_APP_URL=https://auth.theagencyhq.dev`** and the theme URLs point at the production app origin.
+- **`FUSIONAUTH_APP_URL=http://localhost:9011`** — the node's self-address for inter-node calls. With one node
+  those calls are always to itself, so `localhost` needs no DNS at all. Neither the public URL (unresolvable
+  before the Cloudflare records exist) nor the service's own `railway.internal` name (Railway's private DNS
+  would not answer a service's self-lookup, even though other services' names resolved fine) worked here. The
+  browser-facing values — the theme URLs and the tenant issuer — stay on the public origins.
 
 FusionAuth's maintenance mode creates its own database and service user on first boot using the root
 credentials, exactly as it does locally — `DATABASE_ROOT_USERNAME`/`DATABASE_ROOT_PASSWORD` come from the
@@ -230,14 +234,6 @@ header:
 ```ts
 import { defineRailway, github, postgres, preserve, project, service } from "railway/iac";
 
-// The Railway deployment, per docs/design/2026-08-18-railway-deploy-design.md §8.
-// Literals are facts fixed by the design. Secrets are declared preserve() — the value lives only in
-// Railway, entered once in the dashboard on the owning service (design §10.5); apply keeps a declared
-// variable's existing value and never writes one from this file. The Agency reads FusionAuth's secrets
-// through typed references, so each secret has exactly one home. Do NOT use project shared variables:
-// the DSL cannot declare them, and apply deletes what the file does not declare. Composed JDBC URLs use
-// Railway's `${{...}}` template syntax because a typed reference cannot be embedded in a larger string.
-// Every resource is pinned to US East (Virginia); the other US region is us-west2 (California).
 const REGION = "us-east4-eqdc4a";
 
 export default defineRailway(() => {
@@ -247,15 +243,12 @@ export default defineRailway(() => {
   const fusionauth = service("fusionauth", {
     build: {
       builder: "DOCKERFILE",
-      // App-only pushes to main must not rebuild FusionAuth.
       watchPatterns: ["/src/main/fusionauth/**"],
     },
     deploy: {
-      region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
-    // First deploy only: Railway rejects custom-domain *registration* from configuration. Keep this
-    // commented until the domain is registered in the dashboard (design §10.4), then restore it.
+    // Restore after registering the domain in the dashboard (design §10.4).
     // domains: [{ domain: "auth.theagencyhq.dev", port: 9011 }],
     env: {
       DATABASE_PASSWORD: preserve(),
@@ -269,7 +262,7 @@ export default defineRailway(() => {
       FUSIONAUTH_APP_RUNTIME_MODE: "production",
       FUSIONAUTH_APP_THEME_APP_URL: "https://app.theagencyhq.dev",
       FUSIONAUTH_APP_THEME_CSS_URL: "https://app.theagencyhq.dev/static/css/app.css",
-      FUSIONAUTH_APP_URL: "https://auth.theagencyhq.dev",
+      FUSIONAUTH_APP_URL: "http://${{RAILWAY_PRIVATE_DOMAIN}}:9011",
       KICKSTART_ADMIN_PASSWORD: preserve(),
       KICKSTART_AGENCY_CLIENT_SECRET: preserve(),
       KICKSTART_API_KEY: preserve(),
@@ -279,21 +272,19 @@ export default defineRailway(() => {
       SEARCH_TYPE: "database",
     },
     healthcheck: "/api/status",
-    replicas: 1,
+    replicas: { [REGION]: 1 },
     source: github("the-agency-hq/the-agency", { branch: "main", rootDirectory: "src/main/fusionauth" }),
   });
 
   const theAgency = service("the-agency", {
-    // No source: deploys arrive from `latte deploy` / `railway up` (design §4).
+    // No source: deploys arrive from `railway up` (design §4).
     build: {
       builder: "DOCKERFILE",
     },
     deploy: {
-      region: REGION,
       restartPolicyType: "ON_FAILURE",
     },
-    // First deploy only: Railway rejects custom-domain *registration* from configuration. Keep this
-    // commented until the domain is registered in the dashboard (design §10.4), then restore it.
+    // Restore after registering the domain in the dashboard (design §10.4).
     // domains: [{ domain: "app.theagencyhq.dev", port: 8080 }],
     env: {
       DB_PASSWORD: agencyPostgres.env.PGPASSWORD,
@@ -313,7 +304,7 @@ export default defineRailway(() => {
       WEB_COOKIEENCRYPTIONKEY: preserve(),
     },
     healthcheck: "/health",
-    replicas: 1,
+    replicas: { [REGION]: 1 },
   });
 
   return project("The Agency HQ", {
@@ -328,8 +319,10 @@ Notes on the file:
   failure — plus the `fusionauth` watch paths, which under config-as-code were a dashboard-only setting. The
   `healthcheck` and `replicas` shorthands merge into the same deploy config.
 - **Every resource is pinned to `us-east4-eqdc4a` (US East, Virginia)** through the one `REGION` constant —
-  services via `deploy.region`, databases via the `postgres()` config — rather than inheriting the deploying
-  account's preferred-region setting. Both databases and their volumes land beside the services they serve.
+  services via the per-region `replicas` map, databases via the `postgres()` config — rather than inheriting
+  the deploying account's preferred-region setting. The replicas map is deliberate: it compiles to
+  `multiRegionConfig`, the form Railway stores, whereas the scalar `deploy.region` field is never returned by
+  Railway and produces a permanent phantom diff in `railway config plan`.
 - **Custom domains are declared in the file but registered in the dashboard.** Railway rejects custom-domain
   registration from configuration, so the first deploy comments the `domains:` lines out, registers both
   domains by hand, and then restores the lines (§10.4) — from then on the file's entries reconcile the existing
@@ -478,9 +471,9 @@ file at all, which is why this design does not use them.
    `fusionauth-postgres` provisioning) or another `Invalid kickstart file` error are both recoverable the same
    way — fix, redeploy; kickstart validates before applying, so the database is still fresh.
 
-   Until the domain is registered and DNS resolves (10.4 steps 4–6), the log repeats
-   `DistributedCacheNotifier … UnknownHostException: auth.theagencyhq.dev` — the single node calling itself on
-   its public URL. Harmless; it stops once DNS is live.
+   (`FUSIONAUTH_APP_URL` is the node's private self-address (§6), so inter-node calls work before public DNS
+   resolves — a log full of `DistributedCacheNotifier … UnknownHostException: auth.theagencyhq.dev` means that
+   variable regressed to the public URL.)
 4. Verify from a terminal:
 
    ```

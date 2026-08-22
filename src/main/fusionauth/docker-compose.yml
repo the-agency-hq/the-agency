@@ -46,7 +46,6 @@ services:
       # (docker compose down -v). Production provides its own values.
       FUSIONAUTH_APP_THEME_APP_URL: ${FUSIONAUTH_APP_THEME_APP_URL}
       FUSIONAUTH_APP_THEME_CSS_URL: ${FUSIONAUTH_APP_THEME_CSS_URL}
-      FUSIONAUTH_APP_URL: http://fusionauth:9011
       # Kickstart inputs (see kickstart/kickstart.json). Production (Railway) supplies its own values; these
       # defaults are the values that used to be hardcoded in the kickstart, so local provisioning is unchanged
       # and existing .env files need nothing added.

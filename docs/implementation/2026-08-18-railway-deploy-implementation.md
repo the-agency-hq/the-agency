@@ -71,9 +71,11 @@ Railway deprecated config-as-code (`railway.json`) — new services cannot use i
 - [x] `.railway/railway.ts`: the whole §2 topology — both Postgres services, `fusionauth` (GitHub source rooted
       at `src/main/fusionauth`, Dockerfile builder, watch patterns, `/api/status` healthcheck, one replica,
       restart on failure, `auth.theagencyhq.dev:9011`), `the-agency` (source-less CLI-upload service, `/health`,
-      one replica, restart on failure, `app.theagencyhq.dev:8080`), and every service variable — secrets as
-      `ctx.shared.*` references, database credentials as typed `env` references. All four resources pinned to
-      `us-east4-eqdc4a` (US East) through one `REGION` constant.
+      one replica, restart on failure, `app.theagencyhq.dev:8080`), and every service variable — secrets
+      declared `preserve()` (values entered once in the dashboard; project shared variables are unusable
+      because the DSL cannot declare them and apply deletes undeclared ones), cross-service and database
+      credentials as typed `env` references. All four resources pinned to `us-east4-eqdc4a` (US East) through
+      one `REGION` constant.
 - [x] `.railway/package.json` (+ lockfile): the `railway` npm SDK (^3.10.0), private, used only by the Railway
       CLI. `node_modules` is covered by the root `.gitignore`.
 - [x] Deleted `railway.json` and `src/main/fusionauth/railway.json`; `.railwayignore` no longer allowlists

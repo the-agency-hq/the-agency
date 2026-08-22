@@ -134,11 +134,13 @@ public class GitHubConnectionIntegrationTest extends BaseTest {
   }
 
   /**
-   * A refresh token GitHub has stopped honouring is the end of the authorization: there is nothing left to try, and
-   * saying so is what lets the poller report NOT_CONNECTED instead of retrying a dead credential forever.
+   * A refresh token GitHub has stopped honouring is the end of the authorization: there is nothing left to try, so
+   * the dead credential is removed on the spot. The admin UI reads a stored credential as a working connection, so
+   * a dead one left behind would keep the Organization's page offering a repository picker that can never load
+   * instead of the reconnect that fixes it.
    */
   @Test
-  public void anUnrefreshableCredentialReportsNoAccessToken() {
+  public void anUnrefreshableCredentialIsRemoved() {
     var organizationId = createOrganization("github-dead-" + UUID.randomUUID());
     github.tokenLifetime(Duration.ofSeconds(-1));
     assertEquals(links.link(organizationId, "code", "http://localhost/callback"),
@@ -147,10 +149,32 @@ public class GitHubConnectionIntegrationTest extends BaseTest {
 
     assertNull(links.accessToken(organizationId));
 
-    // The credential itself survives, deliberately: it is the Agency's record that this Organization was once
-    // connected, and the operator's fix is to reconnect, not to have the record silently vanish.
     var organization = db.findOrganization(organizationId);
-    assertNotNull(organization.orElseThrow().gitHubConnection());
+    assertNull(organization.orElseThrow().gitHubConnection());
+  }
+
+  /**
+   * A revocation on GitHub's side, discovered by the picker: the stored token is still inside its lifetime, so the
+   * 401 on the listing call is the first thing to learn the truth. The picker removes the dead credential and
+   * returns to the Organization's page, which now warns and offers the reconnect — rather than bouncing back
+   * silently forever while the row still claims a working connection.
+   */
+  @Test
+  public void aRevokedCredentialIsRemovedByThePicker() {
+    github.add("acme", "briefs");
+    var organizationId = createOrganization("github-revoked-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+    github.revokeAll();
+
+    test.get("/app/organizations/" + organizationId + "/connect")
+        .assertRedirect(303, "/app/organizations/" + organizationId);
+
+    assertNull(db.findOrganization(organizationId).orElseThrow().gitHubConnection());
+
+    // The page the bounce lands on is no longer a dead end: it offers the reconnect, not the picker.
+    test.get("/app/organizations/" + organizationId)
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("not connected to GitHub").contains("/app/oauth/github/start"));
   }
 
   @Test

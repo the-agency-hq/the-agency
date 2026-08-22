@@ -27,6 +27,10 @@ import org.lattejava.web.Configuration;
  * <p>Nothing here caches. A token is read from the database on each use and refreshed in place when it is close to
  * expiring, so an authorization revoked on GitHub's side stops working on the next cycle rather than whenever a
  * cache happened to expire.
+ *
+ * <p>A credential proven dead — a refresh GitHub rejects, or one with no usable refresh token left — is removed
+ * from the row on the spot. The admin UI reads a stored credential as a working connection, so a dead one left in
+ * place would keep every page offering actions that can never work instead of the reconnect that fixes them.
  */
 public class GitHubLinkService {
   /**
@@ -84,12 +88,14 @@ public class GitHubLinkService {
 
     if (!tokens.refreshable(now)) {
       logger.log(Level.WARNING, "The GitHub authorization for Organization [{0}] has expired and carries no usable refresh token, so it must be granted again", organizationId);
+      database.clearGitHubConnection(organizationId, now);
       return null;
     }
 
     var refreshed = github.refresh(tokens.refreshToken());
     if (refreshed == null) {
       logger.log(Level.WARNING, "GitHub rejected the refresh token for Organization [{0}], so the authorization must be granted again", organizationId);
+      database.clearGitHubConnection(organizationId, now);
       return null;
     }
 

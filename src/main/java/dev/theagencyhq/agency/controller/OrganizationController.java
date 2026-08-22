@@ -13,6 +13,7 @@ import dev.theagencyhq.agency.db.DatabaseService;
 import dev.theagencyhq.agency.error.ValidationException;
 import dev.theagencyhq.agency.github.GitHubClient;
 import dev.theagencyhq.agency.github.GitHubException;
+import dev.theagencyhq.agency.github.GitHubUnauthorizedException;
 import dev.theagencyhq.agency.model.github.GitHubRepository;
 import dev.theagencyhq.agency.model.BriefFile;
 import dev.theagencyhq.agency.model.BriefSource;
@@ -147,6 +148,12 @@ public class OrganizationController {
     try {
       organizationService.connect(organization.id(), accessToken, fullName.substring(0, slash),
           fullName.substring(slash + 1), branch);
+    } catch (GitHubUnauthorizedException e) {
+      // The credential died between rendering the picker and validating the submission, and GitHub said so. It is
+      // removed for the same reason as in renderConnect: the Organization's page must offer the reconnect.
+      links.unlink(organization.id());
+      res.sendRedirect("/app/organizations/" + organization.id(), 303);
+      return;
     } catch (ValidationException e) {
       renderConnect(req, res, organization, accessToken, e.errors(), fullName, branch);
       return;
@@ -369,6 +376,12 @@ public class OrganizationController {
         repositories.add(repository.fullName());
         defaultBranches.put(repository.fullName(), repository.defaultBranch() == null ? "main" : repository.defaultBranch());
       }
+    } catch (GitHubUnauthorizedException e) {
+      // GitHub refused the credential itself, which no retry fixes: it is removed here so the page this lands on
+      // stops reading the Organization as connected and shows the reconnect warning instead of this same picker.
+      links.unlink(organization.id());
+      res.sendRedirect("/app/organizations/" + organization.id(), 303);
+      return;
     } catch (GitHubException e) {
       res.sendRedirect("/app/organizations/" + organization.id(), 303);
       return;

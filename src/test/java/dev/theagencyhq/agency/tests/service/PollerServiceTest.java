@@ -77,6 +77,9 @@ public class PollerServiceTest extends BaseTest {
     assertEquals(runCycle(organization.id()), SourceStatus.NOT_CONNECTED);
     var after = db.findSource(organization.id()).orElseThrow();
     assertTrue(after.lastError().contains("Reconnect"), after.lastError());
+    // The dead credential is removed, not just reported, so the Organization's page stops reading as connected
+    // and offers the reconnect.
+    assertNull(db.findOrganization(organization.id()).orElseThrow().gitHubConnection());
     // Nothing is torn down: the Brief that was published stays published, because a lapsed authorization says
     // nothing about whether the content it produced is still correct.
     assertEquals(db.findLatestBrief(organization.id()).orElseThrow().version().intValue(), 1);

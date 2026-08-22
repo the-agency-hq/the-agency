@@ -124,6 +124,11 @@ public class PollerService extends IntervalThread {
   // is the same: reconnect. Which of the two paths got here is a detail for the log, not for the operator.
   private SourceStatus notConnected(BriefSource source, RuntimeException cause) {
     logger.log(System.Logger.Level.WARNING, "No usable GitHub authorization for [" + source.fullName() + "]", cause);
+
+    // The credential is removed, not just reported: the admin UI reads a stored credential as a working
+    // connection, so a token GitHub refused mid-cycle must not stay on the row. Idempotent, so the path where
+    // accessToken() already removed it costs nothing.
+    links.unlink(source.organizationId());
     return record(source, source.lastBuiltCommit(), SourceStatus.NOT_CONNECTED,
         "The GitHub authorization for this source is no longer valid. Reconnect the Organization to restore it.");
   }

@@ -10,6 +10,7 @@ import dev.theagencyhq.agency.db.DatabaseService;
 import dev.theagencyhq.agency.error.ValidationException;
 import dev.theagencyhq.agency.github.GitHubClient;
 import dev.theagencyhq.agency.github.GitHubException;
+import dev.theagencyhq.agency.github.GitHubUnauthorizedException;
 import dev.theagencyhq.agency.service.BriefBuildException;
 import dev.theagencyhq.agency.service.BriefBuilder;
 
@@ -38,6 +39,8 @@ public final class SourceValidator {
    * @param accessToken The connecting user's GitHub token.
    * @param database    The database, for the uniqueness check.
    * @param github      The GitHub client.
+   * @throws GitHubUnauthorizedException If GitHub rejected the token — the connection's problem rather than the
+   *     repository's, so it is the caller's to handle, not a validation error.
    * @throws ValidationException with every reason this repository cannot be registered.
    */
   public static void validate(String owner, String repository, String branch, String accessToken,
@@ -88,6 +91,10 @@ public final class SourceValidator {
       }
 
       settings = github.readFile(accessToken, owner, repository, branch, BriefBuilder.SETTINGS_FILE);
+    } catch (GitHubUnauthorizedException e) {
+      // Deliberately not turned into a validation error: "retry" is the wrong instruction for a dead credential,
+      // and the caller owns the connection and what happens to a credential GitHub has refused.
+      throw e;
     } catch (GitHubException e) {
       // A transport failure or an unexpected status. Reported as a validation error rather than a 500 because the
       // operator can act on it -- retrying is the whole of the fix -- and because a stack trace on a form is not an

@@ -40,7 +40,7 @@ public class FusionAuthThemeIntegrationTest extends BaseTest {
       assertTrue(body.contains("/static/css/app.css"),
           "The hosted login page does not link the admin UI's stylesheet, so the Agency theme is not in effect.");
       assertTrue(body.contains("theme-toggle"), "The hosted login page carries no theme toggle.");
-      assertTrue(body.contains("https://the-agency-hq.dev/js/theme-0.1.0.js"),
+      assertTrue(body.contains("https://theagencyhq.dev/js/theme-0.1.0.js"),
           "The hosted login page does not reference the website's theme-switching script.");
       // The login form itself, because the whole suite depends on it: OIDCTestFixture posts these fields on
       // every authorization-code flow, and a theme that drops one breaks every HTTP test at once.

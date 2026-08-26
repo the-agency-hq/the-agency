@@ -12,9 +12,9 @@
  *
  * An external file rather than an inline handler because it has to be. Main installs SecurityHeaders.defaults(),
  * whose Content-Security-Policy is `default-src 'self'` with no 'unsafe-inline', so an inline onchange= is
- * silently refused. Same constraint copy.js and theme.js are written around.
+ * silently refused. Same constraint copy-0.1.0.js and theme-0.1.0.js are written around.
  *
- * Loaded on every page, like copy.js, and does nothing on the ones that have no [data-default-branches] select.
+ * Loaded on every page, like copy-0.1.0.js, and does nothing on the ones that have no [data-default-branches] select.
  */
 (function () {
   function apply(select, branch, force) {

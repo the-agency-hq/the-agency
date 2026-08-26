@@ -102,7 +102,9 @@ public class AdminUIIntegrationTest extends BaseTest {
 
   /**
    * Once connected, the picker is populated from GitHub and each option carries its repository's default branch,
-   * which is the contract {@code /static/js/connect.js} reads to pre-fill the branch field.
+   * which is the contract {@code /static/js/connect-0.1.0.js} reads to pre-fill the branch field. The picker also
+   * offers the install trip as its last option, which is the contract {@code /static/js/click-action-0.1.0.js}
+   * reads.
    */
   @Test
   public void connectListsTheRepositoriesGitHubOffers() {
@@ -115,6 +117,7 @@ public class AdminUIIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("value=\"acme/briefs\" data-branch=\"trunk\"")
                                     .contains("value=\"acme/other\" data-branch=\"main\"")
+                                    .contains("<option value=\"\" data-action=\"/app/oauth/github/install?organizationId=" + organizationId + "\">Find more repositories...</option>")
                                     .contains("Use this repository"));
   }
 
@@ -130,7 +133,7 @@ public class AdminUIIntegrationTest extends BaseTest {
     test.get("/app/organizations/" + organizationId + "/connect")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("Install the GitHub app")
-                                    .contains("https://github.com/apps/")
+                                    .contains("/app/oauth/github/install?organizationId=" + organizationId)
                                     .doesNotContain("Use this repository"));
   }
 
@@ -173,7 +176,7 @@ public class AdminUIIntegrationTest extends BaseTest {
     // The id is the one value on this page a developer has to transcribe by hand -- it goes into a Location's
     // agent-location.json -- so it renders whether or not the Organization has ever built, and it renders next to
     // a copy button carrying the id itself. Asserting data-copy rather than the button's styling ties the test to
-    // the contract /static/js/copy.js reads, which is the part that would actually break.
+    // the contract /static/js/copy-0.1.0.js reads, which is the part that would actually break.
     var organizationId = createOrganization("admin-ui-id-" + UUID.randomUUID());
 
     test.get("/app/organizations/" + organizationId)

@@ -150,10 +150,10 @@ public class Main {
 
   public void main() {
     var briefing = new BriefingController(apiOIDC, Services.briefingService());
-    var github = new GitHubController(cookies, ssrOIDC);
+    var github = new GitHubController(cookies,
+        "https://github.com/apps/" + config.get("github.appName") + "/installations/new", ssrOIDC);
     var members = new MembershipController(ssrOIDC, TEMPLATES);
-    var organizations = new OrganizationController(
-        "https://github.com/apps/" + config.get("github.appName") + "/installations/new", ssrOIDC, TEMPLATES);
+    var organizations = new OrganizationController(ssrOIDC, TEMPLATES);
     var organizationAPI = new OrganizationAPIController(apiOIDC, Services.databaseService());
 
     // Installed once on the literal /app/organizations prefix, mirroring latte-java/app's GroupSecurity: a route
@@ -216,10 +216,13 @@ public class Main {
                     config.get("fusionauth.baseURL") + "/account/?client_id=" + config.get("fusionauth.clientId"), 303))
                 // Inside the gate, deliberately. Granting an Organization a GitHub credential is an operator
                 // action, so an unauthenticated visitor must never be able to start a connection or land a
-                // callback that stores one.
+                // callback that stores one. The install pair lives here too: its return is a GitHub redirect
+                // that must find the picker to go back to, exactly as the callback finds the Organization.
                 .prefix("/oauth/github", oauth -> {
                       oauth.get("/start", github::start);
                       oauth.get("/callback", github::callback);
+                      oauth.get("/install", github::install);
+                      oauth.get("/setup", github::setup);
                     }
                 )
                 .prefix("/organizations", orgs -> {

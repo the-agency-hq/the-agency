@@ -46,6 +46,30 @@ This project uses the Latte Web framework and HTTP server. You can learn more ab
 
 Users connect a GitHub repository to an Organization. This app polls GitHub for changes to the repository. Any changes that occur are downloaded and translated into a Brief. This is stored in the database and versioned.
 
+### GitHub App
+
+Connecting a repository goes through a GitHub App (not an OAuth App). Register one per environment — its callback and setup URLs are single values, so a development App points at `http://localhost:8080` — and configure it as follows:
+
+| Setting | Value |
+|---------|-------|
+| Callback URL | `<base URL>/app/oauth/github/callback` |
+| Expire user authorization tokens | On |
+| Request user authorization (OAuth) during installation | Off (with it on, GitHub ignores the Setup URL and sends installs to the callback URL, which also returns to the picker) |
+| Setup URL | `<base URL>/app/oauth/github/setup` |
+| Redirect on update | On |
+| Repository permissions | Contents: read, Metadata: read |
+| Webhook | Off (not used) |
+
+Then put the App's slug and OAuth credentials in `~/.config/the-agency-hq/the-agency/config.properties`:
+
+```properties
+github.appName=<slug from https://github.com/apps/<slug>>
+github.clientId=...
+github.clientSecret=...
+```
+
+Connecting a repository is then: create an Organization, connect GitHub from its page (the OAuth authorization), and pick a repository. The picker lists every repository the App is installed on that your GitHub user can see. Its install links send you to GitHub to install the App on another account or change what an installation covers, and GitHub returns you to the picker, which lists again.
+
 ## Building and testing
 
 This project uses Latte's CLI as the build and project management system. Here are some commands:

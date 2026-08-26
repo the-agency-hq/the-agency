@@ -268,6 +268,144 @@ public class GitHubConnectionIntegrationTest extends BaseTest {
   }
 
   /**
+   * Sending the operator to install the App carries a state, and GitHub hands that state to the App's setup URL
+   * untouched -- which is the only way the return can know which picker to go back to. Same cookie, same rules as
+   * the OAuth start.
+   */
+  @Test
+  public void installSendsTheBrowserToGitHubAndRemembersTheState() {
+    var organizationId = createOrganization("github-install-" + UUID.randomUUID());
+
+    var cookie = new AtomicReference<String>();
+    test.get("/app/oauth/github/install?organizationId=" + organizationId)
+        .assertStatus(302)
+        .assertResponse(r -> {
+          var location = r.headers().firstValue("Location").orElseThrow();
+          assertTrue(location.startsWith("https://github.com/apps/" + main.config.get("github.appName")
+              + "/installations/new?state="), location);
+          assertFalse(location.endsWith("?state="), location);
+
+          cookie.set(r.headers()
+                      .allValues("Set-Cookie")
+                      .stream()
+                      .filter(c -> c.startsWith(GitHubController.STATE_COOKIE + "="))
+                      .findFirst()
+                      .orElseThrow(() -> new AssertionError("No state cookie: " + r.headers().allValues("Set-Cookie"))));
+        });
+
+    assertTrue(cookie.get().contains("Path=" + GitHubController.COOKIE_PATH), cookie.get());
+    assertTrue(cookie.get().contains("SameSite=Lax"), cookie.get());
+  }
+
+  @Test
+  public void installIs404ForAnUnknownOrganization() {
+    test.get("/app/oauth/github/install?organizationId=" + UUID.randomUUID())
+        .assertStatus(404);
+    test.get("/app/oauth/github/install")
+        .assertStatus(404);
+  }
+
+  /**
+   * The point of the whole pair: come back from GitHub and land on the picker, which lists what the credential can
+   * see now. The repository is registered with the fake only after the trip begins, standing in for the installation
+   * the operator just made -- so the listing on return proves the picker asked GitHub again rather than serving a
+   * list from before.
+   */
+  @Test
+  public void setupReturnsToThePickerWhichListsTheNewRepository() {
+    var organizationId = createOrganization("github-setup-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+    var state = startInstall(organizationId);
+    github.add("acme", "just-installed");
+
+    test.get(GitHubController.SETUP_PATH + "?installation_id=42&setup_action=install&state=" + state)
+        .assertRedirect(303, "/app/organizations/" + organizationId + "/connect?status=installed");
+
+    test.get("/app/organizations/" + organizationId + "/connect?status=installed")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("GitHub access updated").contains("acme/just-installed"));
+  }
+
+  /**
+   * An operator without the rights to install on an account can only ask its admins to. GitHub still returns to
+   * the setup URL, with {@code setup_action=request}, and the picker has to say that nothing has changed yet
+   * rather than present the same list as the outcome.
+   */
+  @Test
+  public void setupForAnInstallRequestSaysItIsPending() {
+    github.add("acme", "briefs");
+    var organizationId = createOrganization("github-setup-request-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+    var state = startInstall(organizationId);
+
+    test.get(GitHubController.SETUP_PATH + "?installation_id=42&setup_action=request&state=" + state)
+        .assertRedirect(303, "/app/organizations/" + organizationId + "/connect?status=install_requested");
+
+    test.get("/app/organizations/" + organizationId + "/connect?status=install_requested")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("waiting for an owner of that GitHub account"));
+  }
+
+  /**
+   * An App configured to request user authorization during installation never uses its setup URL: GitHub runs the
+   * OAuth flow after the install and returns to the callback with the code, {@code installation_id}, and
+   * {@code setup_action} together. The authorization is stored as any other -- but the operator was installing, so
+   * they land on the picker, not the Organization's page.
+   */
+  @Test
+  public void aCallbackFromAnInstallStoresTheCredentialAndReturnsToThePicker() {
+    var organizationId = createOrganization("github-install-callback-" + UUID.randomUUID());
+    var state = startInstall(organizationId);
+    github.add("acme", "just-installed");
+
+    test.get(GitHubController.CALLBACK_PATH + "?code=the-code&installation_id=42&setup_action=install&state=" + state)
+        .assertRedirect(303, "/app/organizations/" + organizationId + "/connect?status=installed");
+
+    assertNotNull(db.findOrganization(organizationId).orElseThrow().gitHubConnection());
+    test.get("/app/organizations/" + organizationId + "/connect?status=installed")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("GitHub access updated").contains("acme/just-installed"));
+  }
+
+  @Test
+  public void aCallbackFromAnInstallRequestSaysItIsPending() {
+    var organizationId = createOrganization("github-install-callback-request-" + UUID.randomUUID());
+    var state = startInstall(organizationId);
+
+    test.get(GitHubController.CALLBACK_PATH + "?code=the-code&installation_id=42&setup_action=request&state=" + state)
+        .assertRedirect(303, "/app/organizations/" + organizationId + "/connect?status=install_requested");
+  }
+
+  /**
+   * GitHub sends every install of the App to the setup URL, including one begun on github.com with no picker
+   * waiting for it. Not an error, so no status: just the listing, the one page that is always somewhere to go.
+   */
+  @Test
+  public void setupWithoutAStateCookieReturnsToTheListing() {
+    test.get(GitHubController.SETUP_PATH + "?installation_id=42&setup_action=install&state=anything")
+        .assertRedirect(303, "/app/organizations/");
+  }
+
+  @Test
+  public void setupWithTheWrongStateReturnsToTheListing() {
+    var organizationId = createOrganization("github-setup-forged-" + UUID.randomUUID());
+    startInstall(organizationId);
+
+    test.get(GitHubController.SETUP_PATH + "?installation_id=42&setup_action=install&state=not-the-nonce")
+        .assertRedirect(303, "/app/organizations/");
+  }
+
+  @Test
+  public void setupForADeletedOrganizationReturnsToTheListing() {
+    var organizationId = createOrganization("github-setup-deleted-" + UUID.randomUUID());
+    var state = startInstall(organizationId);
+    organizationService.delete(organizationId);
+
+    test.get(GitHubController.SETUP_PATH + "?installation_id=42&setup_action=install&state=" + state)
+        .assertRedirect(303, "/app/organizations/");
+  }
+
+  /**
    * Runs {@code /start} and returns the state it put in the authorize URL, leaving the matching cookie in the
    * shared jar so a callback can be made against it.
    */
@@ -278,6 +416,21 @@ public class GitHubConnectionIntegrationTest extends BaseTest {
         .assertResponse(r -> {
           var location = r.headers().firstValue("Location").orElseThrow();
           state.set(location.substring(location.indexOf("&state=") + "&state=".length()));
+        });
+    return state.get();
+  }
+
+  /**
+   * Runs {@code /install} and returns the state it put in the install URL, leaving the matching cookie in the
+   * shared jar so a setup return can be made against it.
+   */
+  private String startInstall(UUID organizationId) {
+    var state = new AtomicReference<String>();
+    test.get("/app/oauth/github/install?organizationId=" + organizationId)
+        .assertStatus(302)
+        .assertResponse(r -> {
+          var location = r.headers().firstValue("Location").orElseThrow();
+          state.set(location.substring(location.indexOf("?state=") + "?state=".length()));
         });
     return state.get();
   }

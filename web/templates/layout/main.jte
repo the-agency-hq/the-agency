@@ -19,10 +19,11 @@
   <script src="https://theagencyhq.dev/js/theme-0.1.0.js" crossorigin></script>
   <!-- Deferred, unlike theme.js: nothing they do is visible before first paint, and they only have to be in place
        by the time someone can click. External for the same CSP reason -- an inline onclick= would be refused.
-       Both are loaded on every page and each does nothing on a page without the elements it looks for, which is
+       All are loaded on every page and each does nothing on a page without the elements it looks for, which is
        cheaper than teaching the layout which page wants which script. -->
-  <script src="/static/js/copy.js" defer></script>
-  <script src="/static/js/connect.js" defer></script>
+  <script src="/static/js/copy-0.1.0.js" defer></script>
+  <script src="/static/js/connect-0.1.0.js" defer></script>
+  <script src="/static/js/click-action-0.1.0.js" defer></script>
   <link rel="stylesheet" href="/static/css/app.css"/>
 </head>
 <body class="bg-white text-slate-900 dark:bg-navy-950 dark:text-slate-100 transition-colors duration-200">

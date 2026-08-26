@@ -1,7 +1,7 @@
 @param String value
 @param String label
 
-<!-- Copies `value` to the clipboard. The click handler lives in /static/js/copy.js and finds this button by its
+<!-- Copies `value` to the clipboard. The click handler lives in /static/js/copy-0.1.0.js and finds this button by its
      data-copy attribute rather than an onclick=: SecurityHeaders' CSP is `default-src 'self'` with no
      'unsafe-inline', which refuses an inline handler silently, so the button would render and do nothing.
 

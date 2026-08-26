@@ -13,6 +13,18 @@
       breadcrumb = @`<a class="hover:text-slate-900 dark:hover:text-white transition-colors" href="/app/organizations/${organizationId}">${model.organization().name()}</a>`)
 
   <div class="max-w-2xl">
+    <%-- The install trip ends in a redirect, so its outcome arrives as a query parameter. Rendered from a fixed
+         set of known values rather than echoed, so nothing an attacker can put in the URL reaches the page. --%>
+    @if("installed".equals(model.status()))
+      <div class="mb-6 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3" role="status">
+        <p class="text-sm text-emerald-800 dark:text-emerald-300">GitHub access updated. The repositories the app can see now are listed below.</p>
+      </div>
+    @elseif("install_requested".equals(model.status()))
+      <div class="mb-6 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3" role="status">
+        <p class="text-sm text-amber-800 dark:text-amber-300">Your request to install the app is waiting for an owner of that GitHub account to approve it. Its repositories appear here once they do.</p>
+      </div>
+    @endif
+
     @if(!model.errors().isEmpty())
       <div class="mb-6 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-4 py-3" role="alert">
         <p class="text-sm font-semibold text-red-800 dark:text-red-300">This repository could not be registered:</p>
@@ -44,9 +56,9 @@
       @if(model.repositories().isEmpty())
         <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">
           This GitHub account has not given The Agency access to any repositories yet. Install the app on the account
-          or organization that owns the Brief source repository, then come back.
+          or organization that owns the Brief source repository. GitHub brings you back here when it is done.
         </p>
-        <a href="${model.installURL()}" target="_blank" rel="noopener"
+        <a href="/app/oauth/github/install?organizationId=${organizationId}"
            class="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 px-4 py-2 text-sm font-semibold text-white dark:text-navy-950 transition-colors">
           Install the GitHub app
         </a>
@@ -60,6 +72,9 @@
               @for(String fullName : model.repositories())
                 <option value="${fullName}" data-branch="${model.defaultBranches().get(fullName)}" selected="${fullName.equals(model.selectedFullName())}">${fullName}</option>
               @endfor
+              <optgroup label="More">
+                <option value="" data-action="/app/oauth/github/install?organizationId=${organizationId}">Find more repositories...</option>
+              </optgroup>
             </select>
           </div>
 
@@ -77,7 +92,7 @@
         </form>
 
         <p class="mt-6 border-t border-slate-200 dark:border-navy-800 pt-4 text-xs text-slate-500 dark:text-slate-400">
-          Missing a repository? <a class="text-accent-700 dark:text-accent-400 hover:underline" href="${model.installURL()}" target="_blank" rel="noopener">Adjust which repositories the GitHub app can see</a>.
+          Missing a repository? <a class="text-accent-700 dark:text-accent-400 hover:underline" href="/app/oauth/github/install?organizationId=${organizationId}">Install the app on another account, or adjust which repositories it can see</a>.
         </p>
       @endif
     </section>

@@ -198,11 +198,23 @@ reports a repository free that the index then rejects.
 | `POST /app/organizations/{id}/connect` | Register the picked repository |
 | `GET /app/oauth/github/start` | Begin the GitHub authorization |
 | `GET /app/oauth/github/callback` | Complete it, then return to the Organization's view page |
+| `GET /app/oauth/github/install` | Send the operator to GitHub to install the App on an account, or change what an installation covers |
+| `GET /app/oauth/github/setup` | The App's **setup URL**: where GitHub returns the browser after an install or update. Returns to the picker |
 
-Both OAuth routes sit **inside** the gated `/app` prefix. Granting an Organization a GitHub credential is an
-operator action, so an unauthenticated visitor must never be able to start a connection or land a callback that
-stores one. The browser profile's cookies are `SameSite=Lax`, so the session rides along on a top-level navigation
-arriving from github.com.
+All four routes sit **inside** the gated `/app` prefix. Granting an Organization a GitHub credential is an operator
+action, so an unauthenticated visitor must never be able to start a connection or land a callback that stores one.
+The browser profile's cookies are `SameSite=Lax`, so the session rides along on a top-level navigation arriving from
+github.com.
+
+The install pair (added 2026-08-25) exists because the picker lists what the credential can see *now*, and the
+operator changes that on GitHub, in another page. Opening the install page in a new tab left them on a bare GitHub
+page with a stale picker behind it. Instead the picker's install links go through `/install` in the same tab, which
+sends the browser to `https://github.com/apps/<slug>/installations/new?state=<nonce>`; GitHub passes `state` through
+to the setup URL untouched, and `/setup` sends the browser back to the picker of the Organization the trip started
+from, which lists afresh. `setup_action=request` (the operator could only ask that account's admins to install) is
+reported on the picker as pending rather than as an unchanged list. The `installation_id` GitHub appends is
+deliberately unread: GitHub documents that it can be spoofed, and the picker lists installations with the
+operator's token anyway.
 
 The `state` parameter is a random nonce and nothing else. The Organization it belongs to travels in the encrypted,
 path-scoped, `Lax` state cookie alongside that nonce, never in the URL — a state that carried the Organization id
@@ -219,8 +231,14 @@ else can fail.
 | `web.cookieEncryptionKey` | 32 bytes, base64, encrypting the OAuth state cookie. |
 
 The GitHub App itself needs: a **user authorization callback URL** of exactly `<base URL>/app/oauth/github/callback`;
-**Expire user authorization tokens** enabled, so refresh tokens are issued; and read access to the **contents** and
-**metadata** of the repositories it is installed on.
+a **setup URL** of exactly `<base URL>/app/oauth/github/setup` with **Redirect on update** enabled, so changing an
+installation's repositories returns to the picker too; **Request user authorization (OAuth) during installation**
+left off, because with it on GitHub never uses the setup URL and returns installs to the callback URL instead (the
+callback recognises that return by its `setup_action` and lands on the picker too, but the setup URL is the
+documented path); **Expire user
+authorization tokens** enabled, so refresh tokens are issued; and read access to the **contents** and **metadata**
+of the repositories it is installed on. The setup URL is one value per App, so a development App must point at the
+developer's own `http://localhost:8080` — it is a browser redirect, so localhost works.
 
 `github.clientId` and `github.clientSecret` ship as `replace-me`. A checked-in default that happened to be a working
 App would let anyone who cloned this repository act as it. FusionAuth never sees these credentials at all — the

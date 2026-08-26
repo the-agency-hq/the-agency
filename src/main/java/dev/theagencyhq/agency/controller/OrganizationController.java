@@ -51,7 +51,6 @@ import dev.theagencyhq.agency.service.Services;
 public class OrganizationController {
   private final DatabaseService database;
   private final GitHubClient github;
-  private final String installURL;
   private final GitHubLinkService links;
   private final OIDC<User> oidc;
   private final OrganizationService organizationService;
@@ -59,16 +58,12 @@ public class OrganizationController {
   private final JTETemplates templates;
 
   /**
-   * @param installURL Where to send an operator who has authorized the Agency's GitHub App but not yet installed it
-   *                   on any account. Built from configuration rather than hard-coded, because the App's slug
-   *                   differs between a development App and the published one.
-   * @param oidc       The browser OIDC profile, for the signed-in user.
-   * @param templates  The template engine.
+   * @param oidc      The browser OIDC profile, for the signed-in user.
+   * @param templates The template engine.
    */
-  public OrganizationController(String installURL, OIDC<User> oidc, JTETemplates templates) {
+  public OrganizationController(OIDC<User> oidc, JTETemplates templates) {
     this.database = Services.databaseService();
     this.github = Services.gitHubClient();
-    this.installURL = installURL;
     this.links = Services.gitHubLinkService();
     this.oidc = oidc;
     this.organizationService = Services.organizationService();
@@ -111,8 +106,8 @@ public class OrganizationController {
       return;
     }
 
-    renderConnect(req, res, organization, accessToken, List.of(), req.getParameter("repository"),
-        req.getParameter("branch"));
+    renderConnect(req, res, organization, accessToken, req.getParameter("status"), List.of(),
+        req.getParameter("repository"), req.getParameter("branch"));
   }
 
   /**
@@ -140,8 +135,8 @@ public class OrganizationController {
     // operator has seen it, including in the select this posts from.
     var slash = fullName == null ? -1 : fullName.indexOf('/');
     if (slash <= 0 || slash == fullName.length() - 1) {
-      renderConnect(req, res, organization, accessToken, List.of("A GitHub repository is required."), fullName,
-          branch);
+      renderConnect(req, res, organization, accessToken, null, List.of("A GitHub repository is required."),
+          fullName, branch);
       return;
     }
 
@@ -155,7 +150,7 @@ public class OrganizationController {
       res.sendRedirect("/app/organizations/" + organization.id(), 303);
       return;
     } catch (ValidationException e) {
-      renderConnect(req, res, organization, accessToken, e.errors(), fullName, branch);
+      renderConnect(req, res, organization, accessToken, null, e.errors(), fullName, branch);
       return;
     }
 
@@ -368,7 +363,7 @@ public class OrganizationController {
    * and if the failure was the credential dying, that page is where the (re)connect warning lives.
    */
   private void renderConnect(HTTPRequest req, HTTPResponse res, Organization organization, String accessToken,
-                             List<String> errors, String selected, String branch) throws IOException {
+                             String status, List<String> errors, String selected, String branch) throws IOException {
     var repositories = new ArrayList<String>();
     var defaultBranches = new HashMap<String, String>();
     try {
@@ -389,7 +384,7 @@ public class OrganizationController {
 
     Collections.sort(repositories);
     var source = database.findSource(organization.id()).orElse(null);
-    var view = new OrganizationConnectView(organization, source, repositories, defaultBranches, installURL, errors,
+    var view = new OrganizationConnectView(organization, source, repositories, defaultBranches, status, errors,
         selected == null ? "" : selected, branch == null ? "" : branch);
     render("pages/connect.jte", req, res, view);
   }

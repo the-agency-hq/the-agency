@@ -122,17 +122,28 @@ public class PipelineIntegrationTest extends BaseTest {
     var brief = db.findLatestBrief(organization.id()).orElseThrow();
     assertEquals(brief.version().intValue(), 1);
 
-    // Two shared directories (skills, rules) mapped to both agent types is 2*2 = 4 files, plus the two escape
-    // hatches (claude/settings.json, codex/config.toml) which map to exactly one agent type each is 2 more: six
-    // in total. This is derived directly from OutputPaths.map's actual mapping rules (verified against
-    // BriefBuilderTest), not assumed.
+    // One skill, one rule and two escape-hatch files through every Translator. The skill is copied three times
+    // (.agents, .claude, .kiro); the rule lands once per Agent that has a rules directory and twice folded
+    // (.agents/AGENTS.md, .kimi-code/AGENTS.md); codex/config.toml absorbs the Codex rules rather than copying.
+    // Derived from the Translators' actual rules (verified against BriefBuilderTest), not assumed.
     assertEquals(brief.files().stream().map(BriefFile::path).toList(), List.of(
+        ".agents/AGENTS.md",
+        ".agents/rules/rule1.md",
+        ".agents/skills/skill1/SKILL.md",
+        ".augment/rules/rule1.md",
         ".claude/rules/rule1.md",
         ".claude/settings.json",
         ".claude/skills/skill1/SKILL.md",
+        ".clinerules/rule1.md",
         ".codex/config.toml",
-        ".codex/rules/rule1.md",
-        ".codex/skills/skill1/SKILL.md"));
+        ".cursor/rules/rule1.mdc",
+        ".devin/rules/rule1.md",
+        ".github/instructions/rule1.instructions.md",
+        ".junie/rules/rule1.md",
+        ".kilocode/rules/rule1.md",
+        ".kimi-code/AGENTS.md",
+        ".kiro/skills/skill1/SKILL.md",
+        ".kiro/steering/rule1.md"));
     brief.files().forEach(f -> assertEquals(f.mode(), "r--------", "Unexpected mode for [" + f.path() + "]"));
 
     // The commit is GitHub's, carried onto the Brief as its provenance, and it is what the next cycle compares

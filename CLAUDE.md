@@ -61,9 +61,15 @@ http://localhost:1080) receives them locally.
 **Brief pipeline.** An Organization connects a GitHub repository through the admin UI (GitHub App OAuth; the
 credential is stored in columns on the `organizations` row). `PollerService` (a background thread, interval
 `poller.intervalSeconds`, disabled via `poller.enabled=false`) polls each source through `GitHubClient`,
-`BriefBuilder` turns the repository tree into a Brief file list, and unchanged content checksums skip the insert.
-Versions are immutable and insert-only; `POST /api/v1/briefing` serves them, and its wire contract is frozen by
-the already-shipped Handler.
+`BriefBuilder` hands the repository tree to every `Translator` in `service/translation/` and unions their files; a
+duplicate output path fails the build. `StandardTranslator` owns `.agents/` (skills, subagents, and the folded rules
+in `.agents/AGENTS.md` — never the root `AGENTS.md`, which is the team's own file); every other Translator owns one
+Agent's dot-directory and writes one file per rule into that Agent's native rules directory (`Rule`), one file per
+subagent (`AgentDefinition`), and its `<agent>/` escape hatch verbatim. Codex has no rules directory, so its rules
+go into `.codex/config.toml` as `developer_instructions`. `docs/research/2026-08-27-agent-rules-research.md` records
+what each Agent reads. Unchanged content checksums skip the insert. Versions are immutable and insert-only;
+`POST /api/v1/briefing` serves them, and its wire contract is frozen by the already-shipped Handler. Adding an Agent
+type is one `Translator` plus an entry in `BriefBuilder.TRANSLATORS`.
 
 **GitHub seam.** `GitHubClient` is an interface; `GitHubHTTPClient` is the real REST implementation. It is the
 app's only outbound dependency and the one thing tests fake — `FakeGitHubClient` is injected into `Main`'s

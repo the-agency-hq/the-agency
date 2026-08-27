@@ -32,11 +32,20 @@ public record BriefFile(String path, String encoding, String mode, String conten
     mode = mode == null || mode.isBlank() ? DEFAULT_MODE : mode.trim();
     content = content == null ? "" : content;
     checksum = checksum == null ? "" : checksum.trim().toLowerCase(Locale.ROOT);
-    // Trimmed, lowercased, deduplicated, sorted. Reordering or recasing a `.mission-types` file changes nothing
-    // a consumer can observe -- the Handler lowercases both sides before comparing -- so none of it may reach the
-    // checksum. Lowercasing here is exactly what the Handler does on parse, so the two agree by construction
-    // rather than by both sides remembering to.
-    missionTypes = missionTypes == null ? List.of()
+    missionTypes = canonicalMissionTypes(missionTypes);
+  }
+
+  /**
+   * Trims, lowercases, deduplicates and sorts. Reordering or recasing a {@code .mission-types} file changes nothing a
+   * consumer can observe — the Handler lowercases both sides before comparing — so none of it may reach the
+   * checksum. Lowercasing here is exactly what the Handler does on parse, so the two agree by construction rather
+   * than by both sides remembering to.
+   *
+   * @param missionTypes Mission Types as authored, or {@code null}.
+   * @return The canonical list.
+   */
+  public static List<String> canonicalMissionTypes(List<String> missionTypes) {
+    return missionTypes == null ? List.of()
         : missionTypes.stream()
                       .filter(Objects::nonNull)
                       .map(t -> t.trim().toLowerCase(Locale.ROOT))

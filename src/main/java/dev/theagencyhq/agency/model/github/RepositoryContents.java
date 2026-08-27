@@ -21,7 +21,6 @@ import module java.base;
  * {@link #files}. A symbolic link does appear, as a small file whose content is the path it points at, which is why
  * {@link #symlink} exists for the build to reject one with.
  * <p>
- * TODO: Ensure that a bad repository (large, junk, etc) doesn't crash the service.
  */
 public record RepositoryContents(String commit, Map<String, byte[]> files, Map<String, String> modes) {
   public RepositoryContents {

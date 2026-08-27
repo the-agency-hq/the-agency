@@ -7,47 +7,18 @@ package dev.theagencyhq.agency.service;
 import module java.base;
 
 /**
- * Maps a source-relative path to the Brief output paths it produces, and validates those outputs.
+ * Validates the Brief output paths the Translators produce.
  *
- * <p>The mapping is data, not code: adding an agent type is one entry in {@link #AGENT_TYPES}.
- *
- * <p>The validation rules mirror the Handler's planner exactly. A Brief that violates any of them makes the
- * Handler reject the entire plan for that Location, so publishing one would silently stop the Organization
- * updating on every machine in the fleet.
+ * <p>The rules mirror the Handler's planner exactly. A Brief that violates any of them makes the Handler reject
+ * the entire plan for that Location, so publishing one would silently stop the Organization updating on every
+ * machine in the fleet.
  */
 public final class OutputPaths {
-  public static final List<AgentType> AGENT_TYPES = List.of(
-      new AgentType("claude", ".claude"),
-      new AgentType("codex", ".codex")
-  );
   public static final String GITIGNORE_NAME = ".gitignore";
   public static final String MANIFEST_NAME = ".handler-manifest";
-  public static final List<String> SHARED_DIRECTORIES = List.of("agents", "rules", "skills");
   public static final String TEMP_INFIX = ".handler-tmp-";
 
   private OutputPaths() {
-  }
-
-  public static List<String> map(String sourceRelativePath) {
-    int slash = sourceRelativePath.indexOf('/');
-    if (slash < 0) {
-      return List.of();
-    }
-
-    var top = sourceRelativePath.substring(0, slash);
-    var remainder = sourceRelativePath.substring(slash + 1);
-    if (remainder.isEmpty()) {
-      return List.of();
-    }
-
-    if (SHARED_DIRECTORIES.contains(top)) {
-      return AGENT_TYPES.stream().map(a -> a.outputRoot() + "/" + top + "/" + remainder).toList();
-    }
-
-    return AGENT_TYPES.stream()
-                      .filter(a -> a.name().equals(top))
-                      .map(a -> a.outputRoot() + "/" + remainder)
-                      .toList();
   }
 
   public static void validate(String outputPath) {
@@ -99,8 +70,5 @@ public final class OutputPaths {
             "Brief file path [" + outputPath + "] contains the reserved infix [" + TEMP_INFIX + "]");
       }
     }
-  }
-
-  public record AgentType(String name, String outputRoot) {
   }
 }

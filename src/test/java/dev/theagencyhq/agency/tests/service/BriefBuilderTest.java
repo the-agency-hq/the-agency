@@ -4,13 +4,9 @@
  */
 package dev.theagencyhq.agency.tests.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.testng;
-
-import dev.theagencyhq.agency.model.*;
-import dev.theagencyhq.agency.model.github.*;
-import dev.theagencyhq.agency.service.*;
-import dev.theagencyhq.agency.util.*;
 
 import static org.testng.Assert.*;
 
@@ -18,6 +14,9 @@ import static org.testng.Assert.*;
  * The builder in isolation: a repository is a map of paths to bytes and a map of paths to Git modes, which is
  * exactly what it is handed in production. No server, no database, and no temporary directories — the builder
  * touches no filesystem, so neither does this.
+ *
+ * <p>What each Translator produces is its own test's business. This one covers what the builder itself owns: the
+ * settings marker, the union of the Translators' outputs, path validation, and the collision check.
  */
 @Test
 public class BriefBuilderTest {
@@ -49,27 +48,20 @@ public class BriefBuilderTest {
 
   @Test
   public void checksumIsDeterministicAndContentSensitive() {
-    write("agents/z.md", "Z");
+    write("agents/z.md", agent("z", "Does Z"));
     write("rules/a.md", "A");
     write("rules/b.md", "B");
 
     var brief = build();
 
-    // The walk visits every path in sorted source order, so an unsorted build would emit both agent types' copies
-    // of agents/z.md before either copy of rules/a.md. Asserting the fully output-path-sorted order here -- not
-    // merely that two builds agree with each other -- is what makes this fail if the final sort were removed:
-    // iterating an unchanged map twice in the same process is stable, so two back-to-back builds would still match.
-    assertEquals(
-        brief.files().stream().map(BriefFile::path).toList(),
-        List.of(
-            ".claude/agents/z.md",
-            ".claude/rules/a.md",
-            ".claude/rules/b.md",
-            ".codex/agents/z.md",
-            ".codex/rules/a.md",
-            ".codex/rules/b.md"
-        )
-    );
+    // Each Translator emits in its own order -- the Standard one, which runs first, puts .agents/skills ahead of
+    // .agents/AGENTS.md -- so asserting that the files come out sorted, not merely that two builds agree with each
+    // other, is what makes this fail if the final sort were removed: iterating an unchanged map twice in the same
+    // process is stable, so two back-to-back builds would still match.
+    var paths = brief.files().stream().map(BriefFile::path).toList();
+    assertEquals(paths, paths.stream().sorted().toList());
+    assertEquals(paths.getFirst(), ".agents/AGENTS.md");
+    assertEquals(paths.getLast(), ".opencode/agents/z.md");
 
     var first = BriefBuilder.checksum(brief);
     assertEquals(BriefBuilder.checksum(build()), first);
@@ -85,9 +77,10 @@ public class BriefBuilderTest {
     write("skills/skill1/SKILL.md", "skill");
 
     var brief = build();
-    assertEquals(brief.fileAt(".claude/skills/skill1/scripts/run.sh").mode(), "r-x------");
-    assertEquals(brief.fileAt(".codex/skills/skill1/scripts/run.sh").mode(), "r-x------");
-    assertEquals(brief.fileAt(".claude/skills/skill1/SKILL.md").mode(), "r--------");
+    for (var root : List.of(".agents", ".claude", ".kiro")) {
+      assertEquals(brief.fileAt(root + "/skills/skill1/scripts/run.sh").mode(), "r-x------");
+      assertEquals(brief.fileAt(root + "/skills/skill1/SKILL.md").mode(), "r--------");
+    }
   }
 
   @DataProvider
@@ -103,23 +96,45 @@ public class BriefBuilderTest {
   }
 
   @Test
-  public void mapsSharedDirectoriesToBothAgentTypes() {
+  public void mapsEverySourceDirectoryThroughEveryTranslator() {
     write("skills/skill1/SKILL.md", "skill");
     write("rules/rule1.md", "rule");
-    write("agents/agent1.md", "agent");
+    write("agents/agent1.md", agent("agent1", "Does one thing"));
     write("claude/settings.json", "{}");
     write("codex/config.toml", "x = 1");
     write("README.md", "ignored");
 
+    // The complete output of one of everything: the reference for what a Brief looks like. Every Translator is
+    // represented, and a Translator that gains or loses an output has to change this list.
     assertEquals(build().files().stream().map(BriefFile::path).toList(), List.of(
+        ".agents/AGENTS.md",
+        ".agents/agents/agent1.md",
+        ".agents/rules/rule1.md",
+        ".agents/skills/skill1/SKILL.md",
+        ".augment/agents/agent1.md",
+        ".augment/rules/rule1.md",
         ".claude/agents/agent1.md",
         ".claude/rules/rule1.md",
         ".claude/settings.json",
         ".claude/skills/skill1/SKILL.md",
-        ".codex/agents/agent1.md",
+        ".clinerules/rule1.md",
+        ".codex/agents/agent1.toml",
         ".codex/config.toml",
-        ".codex/rules/rule1.md",
-        ".codex/skills/skill1/SKILL.md"));
+        ".cursor/rules/rule1.mdc",
+        ".devin/rules/rule1.md",
+        ".factory/droids/agent1.md",
+        ".gemini/agents/agent1.md",
+        ".github/agents/agent1.agent.md",
+        ".github/instructions/rule1.instructions.md",
+        ".junie/agents/agent1.md",
+        ".junie/rules/rule1.md",
+        ".kilo/agents/agent1.md",
+        ".kilocode/rules/rule1.md",
+        ".kimi-code/AGENTS.md",
+        ".kiro/agents/agent1.md",
+        ".kiro/skills/skill1/SKILL.md",
+        ".kiro/steering/rule1.md",
+        ".opencode/agents/agent1.md"));
   }
 
   @Test
@@ -129,7 +144,7 @@ public class BriefBuilderTest {
     write("skills/SKILL.md", "skill");
 
     assertEquals(build().files().stream().map(BriefFile::path).toList(),
-        List.of(".claude/skills/SKILL.md", ".codex/skills/SKILL.md"));
+        List.of(".agents/skills/SKILL.md", ".claude/skills/SKILL.md", ".kiro/skills/SKILL.md"));
   }
 
   @Test
@@ -140,8 +155,9 @@ public class BriefBuilderTest {
     write("skills/skill1/SKILL.md", "skill");
 
     var brief = build();
-    assertEquals(brief.fileAt(".claude/skills/skill1/SKILL.md").missionTypes(), List.of("library", "web"));
-    assertEquals(brief.fileAt(".codex/skills/skill1/SKILL.md").missionTypes(), List.of("library", "web"));
+    for (var root : List.of(".agents", ".claude", ".kiro")) {
+      assertEquals(brief.fileAt(root + "/skills/skill1/SKILL.md").missionTypes(), List.of("library", "web"));
+    }
   }
 
   @Test
@@ -184,12 +200,20 @@ public class BriefBuilderTest {
   }
 
   @Test
-  public void rejectsDuplicateOutputPaths() {
-    // The shared "rules" directory and the "claude" escape hatch can independently target .claude/rules/a.md.
-    // OutputPaths validates one path string at a time and cannot see this collision -- only BriefBuilder, which
-    // sees every source file, can catch two different inputs landing on the same Brief file path.
+  public void rejectsDuplicateOutputPathsFromTheClaudeEscapeHatch() {
+    // The shared "rules" directory and the "claude" escape hatch can independently target .claude/rules/a.md. A
+    // Translator validates one output at a time and cannot see the collision -- only BriefBuilder, which sees every
+    // output, can catch two different inputs landing on the same Brief file path.
     write("rules/a.md", "shared");
     write("claude/rules/a.md", "escape hatch");
+    assertThrows(BriefBuildException.class, this::build);
+  }
+
+  @Test
+  public void rejectsDuplicateOutputPathsFromTheCodexEscapeHatch() {
+    // A translated agent and a hand-written one in the escape hatch, both at .codex/agents/a.toml.
+    write("agents/a.md", agent("a", "Does A"));
+    write("codex/agents/a.toml", "name = \"escape hatch\"");
     assertThrows(BriefBuildException.class, this::build);
   }
 
@@ -203,9 +227,21 @@ public class BriefBuilderTest {
   @Test
   public void skipsAGenuinelyAbsentTopLevelDirectory() {
     write("rules/a.md", "x");
-    // "agents", "skills", "claude", and "codex" hold nothing here, and their absence must not fail the build.
-    assertEquals(build().files().stream().map(BriefFile::path).toList(),
-        List.of(".claude/rules/a.md", ".codex/rules/a.md"));
+    // "agents", "skills" and every escape hatch hold nothing here, and their absence must not fail the build.
+    assertEquals(build().files().stream().map(BriefFile::path).toList(), List.of(
+        ".agents/AGENTS.md",
+        ".agents/rules/a.md",
+        ".augment/rules/a.md",
+        ".claude/rules/a.md",
+        ".clinerules/a.md",
+        ".codex/config.toml",
+        ".cursor/rules/a.mdc",
+        ".devin/rules/a.md",
+        ".github/instructions/a.instructions.md",
+        ".junie/rules/a.md",
+        ".kilocode/rules/a.md",
+        ".kimi-code/AGENTS.md",
+        ".kiro/steering/a.md"));
   }
 
   @Test
@@ -218,6 +254,10 @@ public class BriefBuilderTest {
     assertEquals(file.mode(), "r--------");
     assertEquals(file.checksum(), Checksums.sha256Hex("For Claude".getBytes(StandardCharsets.UTF_8)));
     assertTrue(file.missionTypes().isEmpty());
+  }
+
+  private static String agent(String name, String description) {
+    return "---\nname: " + name + "\ndescription: " + description + "\n---\n\nYou are " + name + ".\n";
   }
 
   private Brief build() {

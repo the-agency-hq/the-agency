@@ -165,8 +165,9 @@ public class AdminUIIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains(".claude/rules/a.md").contains("r--------"));
 
-    // Files are sorted by path, and ".claude/..." sorts before ".codex/...", so the claude copy is index 0.
-    test.get("/app/organizations/" + organizationId + "/versions/1/files/0")
+    // Files are sorted by path: .agents/AGENTS.md, .agents/rules/a.md and .augment/rules/a.md sort ahead of the
+    // claude copy, so it is index 3.
+    test.get("/app/organizations/" + organizationId + "/versions/1/files/3")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains(".claude/rules/a.md").contains("first"));
   }

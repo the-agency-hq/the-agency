@@ -31,6 +31,7 @@ module dev.theagencyhq.agency {
   exports dev.theagencyhq.agency.model.view;
   exports dev.theagencyhq.agency.security;
   exports dev.theagencyhq.agency.service;
+  exports dev.theagencyhq.agency.service.translation;
   exports dev.theagencyhq.agency.service.validation;
   exports dev.theagencyhq.agency.util;
 

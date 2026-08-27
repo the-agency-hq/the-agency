@@ -10,17 +10,30 @@ import module org.lattejava.version;
 import dev.theagencyhq.agency.model.github.RepositoryContents;
 import dev.theagencyhq.agency.model.*;
 import dev.theagencyhq.agency.model.internal.*;
+import dev.theagencyhq.agency.service.translation.*;
 import dev.theagencyhq.agency.util.*;
 
 /**
  * Turns a fetched Brief source repository into an unpublished {@link Brief} — one carrying no checksum and no
  * version, because neither is known until it is stored. Pure — it touches no database, no network and no
  * filesystem, and a build is all-or-nothing so a Brief is never inserted partially.
+ *
+ * <p>The tree is handed to every {@link Translator} in turn, and the Brief is the union of what they produce. The
+ * builder itself knows nothing about any Agent: it verifies the settings marker, validates every output path, and
+ * refuses a tree in which two Translators — or two source files through one Translator — land on the same path.
  */
 public class BriefBuilder {
   public static final String SETTINGS_FILE = "the-agency-hq-settings.json";
   public static final Version SUPPORTED_LAYOUT_VERSION = new Version("1.0.0");
-  private static final System.Logger logger = System.getLogger(BriefBuilder.class.getName());
+  /**
+   * Every Translator, run on every build. Order is immaterial to the output — a Brief sorts its own files — and only
+   * decides which of two colliding outputs is reported as the duplicate.
+   */
+  public static final List<Translator> TRANSLATORS = List.of(new StandardTranslator(), new ClaudeTranslator(),
+      new CodexTranslator(), new CursorTranslator(), new CopilotTranslator(), new DevinTranslator(),
+      new ClineTranslator(), new KiroTranslator(), new AugmentTranslator(), new AntigravityTranslator(),
+      new JunieTranslator(), new KiloTranslator(), new KimiTranslator(), new FactoryTranslator(),
+      new OpenCodeTranslator(), new GeminiTranslator());
 
   /**
    * Computes a Brief's content-addressed checksum. Null members are omitted from the JSON, so a Brief straight out of
@@ -80,38 +93,28 @@ public class BriefBuilder {
     }
   }
 
-  private static List<String> mappedTopLevelDirectories() {
-    var directories = new ArrayList<>(OutputPaths.SHARED_DIRECTORIES);
-    OutputPaths.AGENT_TYPES.forEach(a -> directories.add(a.name()));
-    return directories;
-  }
-
   /**
    * @param organization The Organization the Brief belongs to.
    * @param contents     The source repository at one commit.
    * @return The Brief, carrying no checksum and no version.
-   * @throws BriefBuildException if the repository is not a Brief source, contains a symbolic link under a mapped
-   *                             directory, or produces two files at the same Brief path.
+   * @throws BriefBuildException if the repository is not a Brief source, a Translator rejects it, any output path
+   *                             is invalid, or two outputs share a path.
    */
   public Brief build(Organization organization, RepositoryContents contents) {
     verifySettings(contents.file(SETTINGS_FILE), organization.name());
 
-    var resolver = new MissionTypeResolver(contents);
+    var source = new SourceTree(contents);
     var files = new ArrayList<BriefFile>();
     var seen = new HashSet<String>();
-    var mapped = mappedTopLevelDirectories();
+    for (var translator : TRANSLATORS) {
+      for (var file : translator.translate(source)) {
+        OutputPaths.validate(file.path());
+        if (!seen.add(file.path())) {
+          throw new BriefBuildException("Two source files produce the same Brief file path [" + file.path() + "]");
+        }
 
-    // One pass over the whole repository in sorted order, filtered to the mapped top-level directories, rather
-    // than a recursive walk per directory. There is no tree to descend any more -- the contents are a flat map --
-    // and sorting the paths is what keeps the walk order identical on every run, which the duplicate-output-path
-    // check below depends on to fail the same way every time.
-    for (var path : contents.paths()) {
-      var slash = path.indexOf('/');
-      if (slash < 0 || !mapped.contains(path.substring(0, slash))) {
-        continue;
+        files.add(file);
       }
-
-      addFile(contents, path, resolver, files, seen);
     }
 
     // No checksum and no version: this Brief is the input to both, and the insert assigns them. Brief sorts its own
@@ -125,59 +128,5 @@ public class BriefBuilder {
     // nulls are omitted from the JSON, so the document carries id and name.
     return new Brief(null, new Organization(organization.id(), organization.name(), null, null, null), null, files,
         null, null);
-  }
-
-  private void addFile(RepositoryContents contents, String path, MissionTypeResolver resolver, List<BriefFile> files,
-                       Set<String> seen) {
-    // A link is the one construct that turns a valid relative path into something that resolves outside the tree
-    // once the Handler writes it out, so it fails the build rather than being silently dropped. Checked before the
-    // name filter below so a link named `x.mission-types` is still rejected rather than skipped.
-    if (contents.symlink(path)) {
-      throw new BriefBuildException("The source tree contains a symbolic link [" + path + "]. Links are not "
-                                    + "supported because they can resolve outside the tree.");
-    }
-
-    // Covers both roles at once: `.mission-types` itself ends with `.mission-types`, so a separate exact-name test
-    // would never be reached.
-    if (path.endsWith(MissionTypeResolver.FILE_NAME)) {
-      return;
-    }
-
-    var outputs = OutputPaths.map(path);
-    if (outputs.isEmpty()) {
-      logger.log(System.Logger.Level.DEBUG, "Ignoring unmapped source file [{0}]", path);
-      return;
-    }
-
-    var bytes = contents.file(path);
-    var encoded = encode(bytes);
-    var checksum = Checksums.sha256Hex(bytes);
-    var mode = contents.executable(path) ? BriefFile.EXECUTABLE_MODE : BriefFile.DEFAULT_MODE;
-    var missionTypes = resolver.resolve(path);
-
-    for (var output : outputs) {
-      OutputPaths.validate(output);
-      if (!seen.add(output)) {
-        throw new BriefBuildException("Two source files produce the same Brief file path [" + output + "]");
-      }
-
-      files.add(new BriefFile(output, encoded.encoding(), mode, encoded.content(), checksum, missionTypes));
-    }
-  }
-
-  private Encoded encode(byte[] bytes) {
-    // Strict decoding is the point: a lenient decoder replaces invalid bytes with U+FFFD, which would silently
-    // corrupt every binary asset rather than routing it through base64.
-    var decoder = StandardCharsets.UTF_8.newDecoder()
-                                        .onMalformedInput(CodingErrorAction.REPORT)
-                                        .onUnmappableCharacter(CodingErrorAction.REPORT);
-    try {
-      return new Encoded(BriefFile.DEFAULT_ENCODING, decoder.decode(ByteBuffer.wrap(bytes)).toString());
-    } catch (CharacterCodingException e) {
-      return new Encoded(BriefFile.ENCODING_BASE64, Base64.getEncoder().encodeToString(bytes));
-    }
-  }
-
-  private record Encoded(String encoding, String content) {
   }
 }

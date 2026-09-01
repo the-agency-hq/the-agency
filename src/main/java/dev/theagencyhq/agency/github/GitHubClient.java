@@ -4,9 +4,8 @@
  */
 package dev.theagencyhq.agency.github;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.model.github.*;
 
 /**
  * Everything the Agency asks GitHub for, as one interface so the whole of it can be replaced in tests without a

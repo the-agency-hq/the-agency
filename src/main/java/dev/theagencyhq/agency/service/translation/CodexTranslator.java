@@ -43,6 +43,16 @@ public class CodexTranslator implements Translator {
   private static final Pattern DECLARES_KEY = Pattern.compile("(?m)^\\s*" + DEVELOPER_INSTRUCTIONS_KEY + "\\s*=");
 
   @Override
+  public Agent agent() {
+    return Agent.CODEX;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT) || Translator.under(path, StandardTranslator.SKILLS_ROOT);
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<BriefFile>();
     for (var agent : source.agents()) {

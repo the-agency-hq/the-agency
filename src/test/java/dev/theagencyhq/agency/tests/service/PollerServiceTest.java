@@ -4,12 +4,10 @@
  */
 package dev.theagencyhq.agency.tests.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.testng;
 
-import dev.theagencyhq.agency.github.GitHubException;
-import dev.theagencyhq.agency.model.*;
-import dev.theagencyhq.agency.service.*;
 import dev.theagencyhq.agency.tests.*;
 import dev.theagencyhq.agency.tests.github.FakeGitHubClient;
 

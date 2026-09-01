@@ -18,8 +18,35 @@ import module java.base;
  *
  * <p>Each output path belongs to exactly one Translator. {@code BriefBuilder} fails the build when two produce the
  * same path, so two Translators can never quietly disagree about one file's content.
+ *
+ * <p>A Translator also knows what its Agent reads, which is more than what it produces: most Agents take their
+ * skills from the {@link StandardTranslator}'s {@code .agents/skills}, some take their subagents from another
+ * Agent's directory. {@link #reads} is what {@code BriefReducer} asks when an Organization has narrowed its Agents
+ * and a Handler is to be served only the files those Agents read.
  */
 public interface Translator {
+  /**
+   * @param path      A Brief file path.
+   * @param directory A directory, without a trailing slash.
+   * @return True if the path is inside the directory.
+   */
+  static boolean under(String path, String directory) {
+    return path.startsWith(directory + "/");
+  }
+
+  /**
+   * @return The Agent this Translator serves, or {@code null} for the shared conventions no single Agent owns.
+   */
+  Agent agent();
+
+  /**
+   * @param path A Brief file path.
+   * @return True if the Agent this Translator serves reads the file: its own outputs, plus whichever of the other
+   *     Translators' outputs it consumes. Always false for the shared conventions, whose readers each answer for
+   *     themselves.
+   */
+  boolean reads(String path);
+
   /**
    * @param source The source tree.
    * @return The Brief files this Translator produces from it. May be empty.

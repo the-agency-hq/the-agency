@@ -4,11 +4,8 @@
  */
 package dev.theagencyhq.agency.tests.github;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.github.*;
-import dev.theagencyhq.agency.model.github.*;
-import dev.theagencyhq.agency.util.Checksums;
 
 /**
  * An in-memory GitHub, standing in for {@link GitHubClient} throughout the suite.

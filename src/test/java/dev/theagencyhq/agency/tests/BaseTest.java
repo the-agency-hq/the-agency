@@ -4,18 +4,16 @@
  */
 package dev.theagencyhq.agency.tests;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.fusionauth;
 import module org.lattejava.web;
 import module org.testng;
 
-import dev.theagencyhq.agency.*;
-import dev.theagencyhq.agency.db.*;
-import dev.theagencyhq.agency.model.*;
-import dev.theagencyhq.agency.model.api.*;
-import dev.theagencyhq.agency.service.*;
+import dev.theagencyhq.agency.Main;
+import dev.theagencyhq.agency.model.Member;
+import dev.theagencyhq.agency.model.User;
 import dev.theagencyhq.agency.tests.github.*;
-import dev.theagencyhq.agency.util.*;
 
 import static org.testng.Assert.*;
 
@@ -226,7 +224,7 @@ public abstract class BaseTest {
    * @return The inserted Organization.
    */
   public static Organization insertOrganization(String name) {
-    var organization = new Organization(UUID.randomUUID(), name, null, TEST_INSTANT, TEST_INSTANT);
+    var organization = new Organization(UUID.randomUUID(), name, null, null, TEST_INSTANT, TEST_INSTANT);
     db.insertOrganization(organization);
     insertMember(organization, testUser, Role.OWNER, MembershipState.ACTIVE);
     return organization;

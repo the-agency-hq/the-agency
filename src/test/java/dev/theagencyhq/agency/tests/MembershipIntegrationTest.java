@@ -4,8 +4,8 @@
  */
 package dev.theagencyhq.agency.tests;
 
-import module java.base;
 import module dev.theagencyhq.agency;
+import module java.base;
 import module org.lattejava.fusionauth;
 import module org.lattejava.web;
 import module org.testng;

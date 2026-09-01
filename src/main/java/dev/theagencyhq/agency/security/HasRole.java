@@ -4,13 +4,12 @@
  */
 package dev.theagencyhq.agency.security;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
 
 import dev.theagencyhq.agency.model.Member;
-import dev.theagencyhq.agency.model.MembershipState;
-import dev.theagencyhq.agency.model.Role;
 
 /**
  * Per-route middleware requiring the signed-in user to be an ACTIVE member of the path-bound Organization with one

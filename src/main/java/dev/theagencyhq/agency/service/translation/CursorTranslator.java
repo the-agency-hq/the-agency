@@ -36,6 +36,17 @@ public class CursorTranslator implements Translator {
       """;
 
   @Override
+  public Agent agent() {
+    return Agent.CURSOR;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT) || Translator.under(path, StandardTranslator.SKILLS_ROOT)
+        || Translator.under(path, ClaudeTranslator.AGENTS_ROOT);
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<BriefFile>();
     for (var rule : source.rules()) {

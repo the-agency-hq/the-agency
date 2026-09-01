@@ -25,6 +25,16 @@ public class ClineTranslator implements Translator {
       """;
 
   @Override
+  public Agent agent() {
+    return Agent.CLINE;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT) || Translator.under(path, ClaudeTranslator.SKILLS_ROOT);
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<BriefFile>();
     for (var rule : source.rules()) {

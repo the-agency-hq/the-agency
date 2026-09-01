@@ -4,10 +4,8 @@
  */
 package dev.theagencyhq.agency.model.view;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.model.BriefSource;
-import dev.theagencyhq.agency.model.Organization;
 
 /**
  * The repository picker: pointing a GitHub-connected Organization at the repository its Briefs are built from.

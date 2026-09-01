@@ -4,10 +4,7 @@
  */
 package dev.theagencyhq.agency.model.view;
 
-import module java.base;
-
-import dev.theagencyhq.agency.model.BriefFile;
-import dev.theagencyhq.agency.model.Organization;
+import module dev.theagencyhq.agency;
 
 /**
  * One file within a Brief version. {@code text} is {@code false} for a base64-encoded (binary) file, which is

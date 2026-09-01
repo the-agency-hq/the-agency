@@ -4,8 +4,8 @@
  */
 package dev.theagencyhq.agency;
 
-import module java.base;
 import module dev.theagencyhq.agency;
+import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
 
@@ -233,6 +233,9 @@ public class Main {
                       // Base-gated only (any membership row, PENDING included): the Organization's page is where
                       // an invited user finds Accept and Decline, so it cannot demand what accepting grants.
                       orgs.get("/{organizationId}", organizations::detail);
+                      // Owner-only: the selection decides what every Handler in the Organization is served.
+                      orgs.get("/{organizationId}/agents", organizations::agentsForm, isOwner);
+                      orgs.post("/{organizationId}/agents", organizations::updateAgents, isOwner);
                       // Owner-only: these swap the Organization's source repository.
                       orgs.get("/{organizationId}/connect", organizations::connect, isOwner);
                       orgs.post("/{organizationId}/connect", organizations::connectSource, isOwner);

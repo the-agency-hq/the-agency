@@ -4,12 +4,11 @@
  */
 package dev.theagencyhq.agency.tests;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.web;
 import module org.testng;
 
-import dev.theagencyhq.agency.model.*;
-import dev.theagencyhq.agency.model.api.*;
 import dev.theagencyhq.agency.tests.github.FakeGitHubClient;
 
 import static org.testng.Assert.*;

@@ -4,18 +4,10 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.github.GitHubClient;
-import dev.theagencyhq.agency.model.BriefSource;
 import dev.theagencyhq.agency.model.Member;
-import dev.theagencyhq.agency.model.MembershipState;
-import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.Role;
-import dev.theagencyhq.agency.model.User;
-import dev.theagencyhq.agency.service.validation.OrganizationValidator;
-import dev.theagencyhq.agency.service.validation.SourceValidator;
 
 /**
  * Creates and deletes Organizations, and connects one to the GitHub repository its Briefs are built from.
@@ -70,7 +62,7 @@ public class OrganizationService {
     OrganizationValidator.validate(name, database);
 
     var now = Instant.now();
-    var organization = new Organization(UUID.randomUUID(), name, null, now, now);
+    var organization = new Organization(UUID.randomUUID(), name, null, null, now, now);
     database.insertOrganization(organization);
     database.insertMember(
         new Member(organization.id(), creator.userId(), Role.OWNER, MembershipState.ACTIVE, null, null, now));
@@ -79,5 +71,44 @@ public class OrganizationService {
 
   public void delete(UUID organizationId) {
     database.deleteOrganization(organizationId);
+  }
+
+  /**
+   * Changes which Agents an Organization is interested in. A change republishes the latest Brief as a new version
+   * carrying the new selection, so every Handler picks it up on its next poll: the version and checksum they echo
+   * no longer match, and the Brief they are then served is reduced to the new selection. Nothing is rebuilt — the
+   * files are the latest version's, verbatim — and an Organization with no version yet gets no version, since its
+   * first build embeds the selection anyway.
+   *
+   * @param organization The Organization as currently stored.
+   * @param agents       The new selection, or {@code null} for every Agent.
+   * @return True if the selection changed. An unchanged selection writes nothing and publishes nothing.
+   * @throws ValidationException if the selection names no Agent at all.
+   */
+  public boolean updateAgents(Organization organization, Agents agents) {
+    if (agents != null && (agents.enabled() == null || agents.enabled().isEmpty())) {
+      throw new ValidationException(List.of("Select at least one Agent, or All."));
+    }
+
+    // The Agents record canonicalizes (sorts, deduplicates) at construction, so both sides compare as selections
+    // rather than as orderings.
+    var now = Instant.now();
+    var updated = new Organization(organization.id(), organization.name(), agents, organization.gitHubConnection(),
+        organization.insertInstant(), now);
+    if (Objects.equals(updated.agents(), organization.agents())) {
+      return false;
+    }
+
+    // The republished document is built exactly as BriefBuilder builds one -- identity and selection only, then
+    // checksummed -- so the next poll, which builds the same files under the same selection, computes the same
+    // checksum and records UNCHANGED rather than publishing a duplicate.
+    var republished = database.findLatestBrief(organization.id()).map(latest -> {
+      var content = new Brief(null, new Organization(organization.id(), organization.name(), updated.agents(), null,
+          null, null), null, latest.files(), null, null);
+      return new Brief(BriefBuilder.checksum(content), content.organization(), null, content.files(),
+          latest.sourceCommit(), now);
+    }).orElse(null);
+    database.updateAgents(organization.id(), updated.agents(), now, republished);
+    return true;
   }
 }

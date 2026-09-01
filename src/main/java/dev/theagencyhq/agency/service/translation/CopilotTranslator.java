@@ -24,6 +24,16 @@ public class CopilotTranslator implements Translator {
       """;
 
   @Override
+  public Agent agent() {
+    return Agent.COPILOT;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT) || Translator.under(path, StandardTranslator.SKILLS_ROOT);
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<BriefFile>();
     for (var rule : source.rules()) {

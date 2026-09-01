@@ -4,12 +4,10 @@
  */
 package dev.theagencyhq.agency.tests.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.jwt;
 import module org.testng;
-
-import dev.theagencyhq.agency.model.User;
-import dev.theagencyhq.agency.service.UserService;
 
 import static org.testng.Assert.*;
 

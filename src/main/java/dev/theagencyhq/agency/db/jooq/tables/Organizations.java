@@ -20,6 +20,7 @@ import org.jooq.Converter;
 import org.jooq.Field;
 import org.jooq.ForeignKey;
 import org.jooq.InverseForeignKey;
+import org.jooq.JSONB;
 import org.jooq.Name;
 import org.jooq.Path;
 import org.jooq.PlainSQL;
@@ -104,6 +105,11 @@ public class Organizations extends TableImpl<OrganizationsRecord> {
      * The column <code>public.organizations.update_instant</code>.
      */
     public final TableField<OrganizationsRecord, Instant> UPDATE_INSTANT = createField(DSL.name("update_instant"), SQLDataType.BIGINT.nullable(false), this, "", Converter.ofNullable(Long.class, Instant.class, t -> t == null ? null : java.time.Instant.ofEpochMilli(t), u -> u == null ? null : u.toEpochMilli()));
+
+    /**
+     * The column <code>public.organizations.agents</code>.
+     */
+    public final TableField<OrganizationsRecord, JSONB> AGENTS = createField(DSL.name("agents"), SQLDataType.JSONB, this, "");
 
     private Organizations(Name alias, Table<OrganizationsRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);

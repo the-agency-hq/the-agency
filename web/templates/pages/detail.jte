@@ -1,3 +1,4 @@
+@import dev.theagencyhq.agency.model.Agents
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.Brief
 @import dev.theagencyhq.agency.model.view.OrganizationDetailView
@@ -18,6 +19,9 @@
             <a href="/app/organizations/${organizationId}/members/" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6-4a3 3 0 11-3-3"/></svg>
               Members
+            </a>
+            <a href="/app/organizations/${organizationId}/agents" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">
+              Agents
             </a>
           @endif
           @if(model.canManage() && !model.needsGitHubConnection())
@@ -100,6 +104,10 @@
           <code class="font-mono text-sm text-slate-700 dark:text-slate-300 break-all">${organizationId}</code>
           @template.components.copy-button(value = organizationId, label = "Copy Organization id")
         </dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="dossier-label">Agents</dt>
+        <dd class="mt-1 text-sm text-slate-700 dark:text-slate-300">${Agents.describe(model.organization().agents())}</dd>
       </div>
       @if(model.source() != null)
         <div>

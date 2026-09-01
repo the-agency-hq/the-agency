@@ -4,16 +4,10 @@
  */
 package dev.theagencyhq.agency.security;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
-
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.model.Member;
-import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.Role;
-import dev.theagencyhq.agency.model.User;
-import dev.theagencyhq.agency.service.Services;
 
 /**
  * The Organization security middleware, ported from {@code latte-java/app}'s {@code GroupSecurity}. Installed once

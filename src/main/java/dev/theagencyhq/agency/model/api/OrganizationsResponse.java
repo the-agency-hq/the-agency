@@ -4,10 +4,10 @@
  */
 package dev.theagencyhq.agency.model.api;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.json;
 
-import dev.theagencyhq.agency.model.Organization;
 import dev.theagencyhq.agency.model.api.internal.OrganizationsResponseJSON;
 
 /**

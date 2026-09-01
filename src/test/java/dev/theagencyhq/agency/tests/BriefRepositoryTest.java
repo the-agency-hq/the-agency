@@ -4,14 +4,10 @@
  */
 package dev.theagencyhq.agency.tests;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.web;
 import module org.testng;
-
-import dev.theagencyhq.agency.model.Brief;
-import dev.theagencyhq.agency.model.BriefSource;
-import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.SourceStatus;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNull;
@@ -23,7 +19,7 @@ public class BriefRepositoryTest extends BaseTest {
   @Test
   public void insertsAndReadsTheWholeGraph() {
     var now = Instant.ofEpochMilli(1_700_000_000_000L);
-    var organization = new Organization(UUID.randomUUID(), "Acme-" + UUID.randomUUID(), null, now, now);
+    var organization = new Organization(UUID.randomUUID(), "Acme-" + UUID.randomUUID(), null, null, now, now);
     db.insertOrganization(organization);
 
     assertEquals(db.findOrganization(organization.id()).orElseThrow().name(), organization.name());

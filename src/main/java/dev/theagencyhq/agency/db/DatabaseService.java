@@ -4,24 +4,25 @@
  */
 package dev.theagencyhq.agency.db;
 
+import module com.zaxxer.hikari;
+import module dev.theagencyhq.agency;
 import module java.base;
+import module org.jooq;
 import module org.lattejava.database;
+import module org.postgresql.jdbc;
 
-import com.zaxxer.hikari.*;
-import dev.theagencyhq.agency.error.*;
-import dev.theagencyhq.agency.model.*;
-// Single-type, on top of the star import above, because org.jooq also exports a Role and the two star imports
-// would otherwise make every unqualified use ambiguous.
+import dev.theagencyhq.agency.model.Member;
 import dev.theagencyhq.agency.model.Role;
-import dev.theagencyhq.agency.model.github.*;
 import dev.theagencyhq.agency.model.internal.*;
-import org.jooq.*;
-import org.jooq.exception.*;
-import org.jooq.impl.*;
+import java.sql.Connection;
+import org.jooq.Condition;
 import org.lattejava.web.Configuration;
-import org.postgresql.util.*;
 
 import static dev.theagencyhq.agency.db.jooq.Tables.*;
+
+// Single-type Member and Role, on top of the module imports above, because java.base also exports a Member
+// (java.lang.reflect) and org.jooq a Role, and two module imports of the same name make every unqualified use
+// ambiguous.
 
 /**
  * PostgreSQL-backed data access, implemented with jOOQ over a HikariCP connection pool. This service owns the
@@ -61,6 +62,39 @@ public class DatabaseService {
     this.dsl = DSL.using(dataSource, SQLDialect.POSTGRES);
   }
 
+  private static Agents fromAgentsColumn(JSONB column) {
+    return column == null ? null : AgentsJSON.fromJSON(column.data());
+  }
+
+  // The stored document holds only what is content-addressed -- the Organization, the files and the checksum over
+  // them. Version and provenance are columns, so each is stored in exactly one place; toBrief puts them back on
+  // the way out.
+  private static Brief insertBrief(DSLContext context, Brief brief) {
+    var organizationId = brief.organization().id();
+    Brief document = new Brief(brief.checksum(), brief.organization(), null, brief.files(), null, null);
+    var version = context.insertInto(BRIEFS)
+                         .set(BRIEFS.ID, UUID.randomUUID())
+                         .set(BRIEFS.ORGANIZATION_ID, organizationId)
+                         .set(BRIEFS.VERSION,
+                             DSL.field(
+                                 DSL.select(
+                                        DSL.coalesce(DSL.max(BRIEFS.VERSION), 0).plus(1)
+                                    )
+                                    .from(BRIEFS)
+                                    .where(BRIEFS.ORGANIZATION_ID.eq(organizationId))
+                             )
+                         )
+                         .set(BRIEFS.CHECKSUM, brief.checksum())
+                         .set(BRIEFS.DOCUMENT, BriefJSON.toJSON(document))
+                         .set(BRIEFS.SOURCE_COMMIT, brief.sourceCommit())
+                         .set(BRIEFS.INSERT_INSTANT, brief.insertInstant())
+                         .returningResult(BRIEFS.VERSION)
+                         .fetchOne(0, int.class);
+
+    return new Brief(brief.checksum(), brief.organization(), version, brief.files(), brief.sourceCommit(),
+        brief.insertInstant());
+  }
+
   // The single place each table's insert column list is written. Both the standalone public inserts and the
   // transactional createOrganizationWithSource route through these, so adding a column is one edit rather than
   // three -- of which the third was previously easy to miss entirely, and would have failed only at runtime.
@@ -72,6 +106,7 @@ public class DatabaseService {
     context.insertInto(ORGANIZATIONS)
            .set(ORGANIZATIONS.ID, organization.id())
            .set(ORGANIZATIONS.NAME, organization.name())
+           .set(ORGANIZATIONS.AGENTS, toAgentsColumn(organization.agents()))
            .set(ORGANIZATIONS.GITHUB_LOGIN, connection == null ? null : connection.login())
            .set(ORGANIZATIONS.GITHUB_ACCESS_TOKEN, tokens == null ? null : tokens.accessToken())
            .set(ORGANIZATIONS.GITHUB_ACCESS_EXPIRATION, tokens == null ? null : tokens.accessExpiration())
@@ -98,9 +133,14 @@ public class DatabaseService {
            .execute();
   }
 
-  // The stored document holds only what is content-addressed -- the Organization, the files and the checksum over
-  // them. Version and provenance are columns, put back here, so each is stored in exactly one place. Parsing here
-  // rather than at each call site is what lets every caller work in Briefs and never in JSON text.
+  // Null for every Agent rather than a document listing all of them, so a selection that was never narrowed is
+  // NULL in the column, absent from the Brief document, and invisible to every checksum computed before the
+  // column existed.
+  private static JSONB toAgentsColumn(Agents agents) {
+    return agents == null ? null : JSONB.jsonb(AgentsJSON.toJSON(agents));
+  }
+
+  // Parsing here rather than at each call site is what lets every caller work in Briefs and never in JSON text.
   private static Brief toBrief(org.jooq.Record record) {
     var stored = BriefJSON.fromJSON(record.get(BRIEFS.DOCUMENT));
     return new Brief(stored.checksum(), stored.organization(), record.get(BRIEFS.VERSION), stored.files(),
@@ -137,6 +177,7 @@ public class DatabaseService {
     return new Organization(
         record.get(ORGANIZATIONS.ID),
         record.get(ORGANIZATIONS.NAME),
+        fromAgentsColumn(record.get(ORGANIZATIONS.AGENTS)),
         toConnection(record),
         record.get(ORGANIZATIONS.INSERT_INSTANT),
         record.get(ORGANIZATIONS.UPDATE_INSTANT));
@@ -183,12 +224,12 @@ public class DatabaseService {
   }
 
   /**
-   * Removes an Organization's GitHub credential, if it has one. Idempotent, and a no-op for an Organization that
-   * does not exist.
+   * Removes an Organization's GitHub credential, if it has one. Idempotent, and a no-op for an Organization that does
+   * not exist.
    *
    * @param organizationId The Organization.
-   * @param updateInstant  When the row was updated. A parameter rather than a clock read here, like every other
-   *                       write method on this class.
+   * @param updateInstant  When the row was updated. A parameter rather than a clock read here, like every other write
+   *                       method on this class.
    */
   public void clearGitHubConnection(UUID organizationId, Instant updateInstant) {
     dsl.update(ORGANIZATIONS)
@@ -272,11 +313,11 @@ public class DatabaseService {
    * Case-insensitive, matching the {@code organizations_uk_name} unique index on {@code LOWER(name)}.
    *
    * <p>Postgres lowercases <em>both</em> sides, deliberately. Lowercasing the argument in Java instead would put
-   * two different case-folding implementations on the two sides of the comparison, and names are display text with
-   * no character-set restriction, so they can contain the characters those two disagree about. Any disagreement
-   * shows up as this check reporting a name free that the unique index then rejects, or as two Organizations that
-   * render identically in the admin UI. Folding both sides with the same function the index uses makes that
-   * impossible rather than unlikely.
+   * two different case-folding implementations on the two sides of the comparison, and names are display text with no
+   * character-set restriction, so they can contain the characters those two disagree about. Any disagreement shows up
+   * as this check reporting a name free that the unique index then rejects, or as two Organizations that render
+   * identically in the admin UI. Folding both sides with the same function the index uses makes that impossible rather
+   * than unlikely.
    *
    * @param name The name to look for, in any case.
    * @return The Organization, if one is registered under that name.
@@ -294,10 +335,9 @@ public class DatabaseService {
   }
 
   /**
-   * Case-insensitive on both halves, matching the {@code brief_sources_uk_repository} unique index, and lowercased
-   * by Postgres on both sides for the same reason {@link #findOrganizationByName} is: two different case-folding
-   * implementations either side of a comparison is how a check reports a repository free that the index then
-   * rejects.
+   * Case-insensitive on both halves, matching the {@code brief_sources_uk_repository} unique index, and lowercased by
+   * Postgres on both sides for the same reason {@link #findOrganizationByName} is: two different case-folding
+   * implementations either side of a comparison is how a check reports a repository free that the index then rejects.
    *
    * @param owner      The repository owner, in any case.
    * @param repository The repository name, in any case.
@@ -338,28 +378,7 @@ public class DatabaseService {
    * @return The stored Brief, carrying the version that was assigned.
    */
   public Brief insertBrief(Brief brief) {
-    var organizationId = brief.organization().id();
-    Brief document = new Brief(brief.checksum(), brief.organization(), null, brief.files(), null, null);
-    var version = dsl.insertInto(BRIEFS)
-                     .set(BRIEFS.ID, UUID.randomUUID())
-                     .set(BRIEFS.ORGANIZATION_ID, organizationId)
-                     .set(BRIEFS.VERSION,
-                         DSL.field(
-                             DSL.select(
-                                    DSL.coalesce(DSL.max(BRIEFS.VERSION), 0).plus(1)
-                                )
-                                .from(BRIEFS)
-                                .where(BRIEFS.ORGANIZATION_ID.eq(organizationId))
-                         )
-                     )
-                     .set(BRIEFS.CHECKSUM, brief.checksum())
-                     .set(BRIEFS.DOCUMENT, BriefJSON.toJSON(document))
-                     .set(BRIEFS.SOURCE_COMMIT, brief.sourceCommit())
-                     .set(BRIEFS.INSERT_INSTANT, brief.insertInstant())
-                     .returningResult(BRIEFS.VERSION)
-                     .fetchOne(0, int.class);
-
-    return new Brief(brief.checksum(), brief.organization(), version, brief.files(), brief.sourceCommit(), brief.insertInstant());
+    return insertBrief(dsl, brief);
   }
 
   /**
@@ -386,31 +405,6 @@ public class DatabaseService {
       insertOrganization(dsl, organization);
     } catch (DataAccessException e) {
       throw translateUniqueViolation(e, organization.name(), null);
-    }
-  }
-
-  /**
-   * Replaces an Organization's Brief source with a new one, in one transaction so a failure leaves the old source in
-   * place rather than none at all. Reconnecting is the same operation as connecting for the first time — the delete
-   * simply removes nothing — which is what keeps a re-authorization from needing a second code path.
-   *
-   * <p>The source's poll history is deliberately not carried over. {@code lastBuiltCommit} in particular belongs to
-   * whatever repository was registered before, and preserving it across a change of repository would make the next
-   * cycle compare the new repository's head against the old one's and, if they happened to agree, skip the build
-   * that was the entire point of reconnecting.
-   *
-   * @param source The new source.
-   * @throws ValidationException if the repository is already registered to another Organization.
-   */
-  public void replaceSource(BriefSource source) {
-    try {
-      dsl.transaction(config -> {
-        var tx = DSL.using(config);
-        tx.deleteFrom(BRIEF_SOURCES).where(BRIEF_SOURCES.ORGANIZATION_ID.eq(source.organizationId())).execute();
-        insertSource(tx, source);
-      });
-    } catch (DataAccessException e) {
-      throw translateUniqueViolation(e, null, source);
     }
   }
 
@@ -471,8 +465,8 @@ public class DatabaseService {
 
   /**
    * @param userId The user.
-   * @return Every membership row the user holds, across all Organizations and in both states — the listing page
-   *     reads it to split pending invitations from the Organizations the user is a member of.
+   * @return Every membership row the user holds, across all Organizations and in both states — the listing page reads
+   *     it to split pending invitations from the Organizations the user is a member of.
    */
   public List<Member> listMembersForUser(UUID userId) {
     return dsl.selectFrom(MEMBERS)
@@ -494,8 +488,8 @@ public class DatabaseService {
    * @param userId The user whose memberships drive the result.
    * @param state  Narrow to memberships in this state, or {@code null} for all of them. The admin UI passes
    *               {@code null} so an invited user can find the Organization and accept; the APIs pass
-   *               {@link MembershipState#ACTIVE} because an invitation someone has not accepted entitles their
-   *               Handler to nothing.
+   *               {@link MembershipState#ACTIVE} because an invitation someone has not accepted entitles their Handler
+   *               to nothing.
    * @return The matching Organizations.
    */
   public List<Organization> listOrganizationsForUser(UUID userId, MembershipState state) {
@@ -517,6 +511,55 @@ public class DatabaseService {
   }
 
   /**
+   * Replaces an Organization's Brief source with a new one, in one transaction so a failure leaves the old source in
+   * place rather than none at all. Reconnecting is the same operation as connecting for the first time — the delete
+   * simply removes nothing — which is what keeps a re-authorization from needing a second code path.
+   *
+   * <p>The source's poll history is deliberately not carried over. {@code lastBuiltCommit} in particular belongs to
+   * whatever repository was registered before, and preserving it across a change of repository would make the next
+   * cycle compare the new repository's head against the old one's and, if they happened to agree, skip the build that
+   * was the entire point of reconnecting.
+   *
+   * @param source The new source.
+   * @throws ValidationException if the repository is already registered to another Organization.
+   */
+  public void replaceSource(BriefSource source) {
+    try {
+      dsl.transaction(config -> {
+        var tx = DSL.using(config);
+        tx.deleteFrom(BRIEF_SOURCES).where(BRIEF_SOURCES.ORGANIZATION_ID.eq(source.organizationId())).execute();
+        insertSource(tx, source);
+      });
+    } catch (DataAccessException e) {
+      throw translateUniqueViolation(e, null, source);
+    }
+  }
+
+  /**
+   * Writes an Organization's Agent selection and, when a Brief is given, publishes it as the Organization's next
+   * version in the same transaction — so the row can never say one thing while the latest version says another.
+   *
+   * @param organizationId The Organization.
+   * @param agents         The selection, or {@code null} for every Agent.
+   * @param updateInstant  When the row was updated. A parameter rather than a clock read here, like every other write
+   *                       method on this class.
+   * @param republished    The Brief to store as the next version, carrying the new selection, or {@code null} when the
+   *                       Organization has no version to republish. Its {@code version} is ignored.
+   * @return The stored Brief carrying the version that was assigned, or {@code null} if none was given.
+   */
+  public Brief updateAgents(UUID organizationId, Agents agents, Instant updateInstant, Brief republished) {
+    return dsl.transactionResult(config -> {
+      var tx = DSL.using(config);
+      tx.update(ORGANIZATIONS)
+        .set(ORGANIZATIONS.AGENTS, toAgentsColumn(agents))
+        .set(ORGANIZATIONS.UPDATE_INSTANT, updateInstant)
+        .where(ORGANIZATIONS.ID.eq(organizationId))
+        .execute();
+      return republished == null ? null : insertBrief(tx, republished);
+    });
+  }
+
+  /**
    * Writes an Organization's GitHub connection, replacing whatever was there.
    *
    * <p>{@code update_instant} moves with every write to the row, this one included — which means it moves on every
@@ -525,8 +568,8 @@ public class DatabaseService {
    *
    * @param organizationId The Organization.
    * @param connection     The connection to store.
-   * @param updateInstant  When the row was updated. A parameter rather than a clock read here, like every other
-   *                       write method on this class.
+   * @param updateInstant  When the row was updated. A parameter rather than a clock read here, like every other write
+   *                       method on this class.
    * @return True if the Organization exists and the connection was written.
    */
   public boolean updateGitHubConnection(UUID organizationId, GitHubConnection connection, Instant updateInstant) {
@@ -553,8 +596,8 @@ public class DatabaseService {
    * @param organizationId The Organization.
    * @param userId         The member.
    * @param state          The new state.
-   * @param joinedAt       When the member joined — set alongside the state because the only transition is
-   *                       PENDING to ACTIVE, and the moment of acceptance is exactly when that timestamp exists.
+   * @param joinedAt       When the member joined — set alongside the state because the only transition is PENDING to
+   *                       ACTIVE, and the moment of acceptance is exactly when that timestamp exists.
    */
   public void updateMemberState(UUID organizationId, UUID userId, MembershipState state, Instant joinedAt) {
     dsl.update(MEMBERS)

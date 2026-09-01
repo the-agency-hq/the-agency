@@ -4,11 +4,8 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.db.*;
-import dev.theagencyhq.agency.github.*;
-import dev.theagencyhq.agency.model.*;
 
 /**
  * The poll service: ask GitHub what each registered source's branch points at, and rebuild its Brief when the content

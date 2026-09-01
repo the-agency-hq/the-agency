@@ -4,14 +4,11 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.version;
 
-import dev.theagencyhq.agency.model.github.RepositoryContents;
-import dev.theagencyhq.agency.model.*;
 import dev.theagencyhq.agency.model.internal.*;
-import dev.theagencyhq.agency.service.translation.*;
-import dev.theagencyhq.agency.util.*;
 
 /**
  * Turns a fetched Brief source repository into an unpublished {@link Brief} — one carrying no checksum and no
@@ -120,13 +117,15 @@ public class BriefBuilder {
     // No checksum and no version: this Brief is the input to both, and the insert assigns them. Brief sorts its own
     // files, so the checksum does not depend on the order they were collected in.
     //
-    // Only the Organization's identity, never the rest of its row. The GitHub connection is a live bearer
-    // credential and this document is served to every Handler in the fleet, so it must never ride along; the
-    // instants must not either, because update_instant moves whenever the organizations row changes -- including
-    // every eight-hour token refresh -- and folding it into the document would change this Brief's checksum
-    // without a byte of content changing, publishing a new version that every Handler then re-downloads. The
-    // nulls are omitted from the JSON, so the document carries id and name.
-    return new Brief(null, new Organization(organization.id(), organization.name(), null, null, null), null, files,
-        null, null);
+    // Only the Organization's identity and its Agent selection, never the rest of its row. The GitHub connection
+    // is a live bearer credential and this document is served to every Handler in the fleet, so it must never ride
+    // along; the instants must not either, because update_instant moves whenever the organizations row changes --
+    // including every eight-hour token refresh -- and folding it into the document would change this Brief's
+    // checksum without a byte of content changing, publishing a new version that every Handler then re-downloads.
+    // The selection does ride along: it decides which of these files a Handler is served, so it is part of what
+    // the version means. The nulls are omitted from the JSON, so the document carries id, name and -- only when
+    // narrowed -- agents.
+    return new Brief(null, new Organization(organization.id(), organization.name(), organization.agents(), null, null,
+        null), null, files, null, null);
   }
 }

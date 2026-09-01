@@ -4,13 +4,9 @@
  */
 package dev.theagencyhq.agency.tests;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.testng;
-
-import dev.theagencyhq.agency.model.github.RepositoryContents;
-import dev.theagencyhq.agency.model.github.TreeEntry;
-import dev.theagencyhq.agency.service.BriefBuildException;
-import dev.theagencyhq.agency.service.MissionTypeResolver;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;

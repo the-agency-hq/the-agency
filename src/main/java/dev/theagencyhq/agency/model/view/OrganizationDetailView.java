@@ -4,15 +4,10 @@
  */
 package dev.theagencyhq.agency.model.view;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 
-import dev.theagencyhq.agency.model.BriefSource;
-import dev.theagencyhq.agency.model.Brief;
 import dev.theagencyhq.agency.model.Member;
-import dev.theagencyhq.agency.model.MembershipState;
-import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.Role;
-import dev.theagencyhq.agency.model.SourceStatus;
 
 /**
  * An Organization's view page: the Organization itself (which carries its GitHub connection), its single Brief

@@ -4,14 +4,14 @@
  */
 package dev.theagencyhq.agency.tests.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
+import module java.sql;
 import module org.lattejava.database;
 import module org.testng;
+
 import java.sql.Connection;
 import java.time.Duration;
-
-import dev.theagencyhq.agency.db.*;
-import dev.theagencyhq.agency.model.*;
 import org.lattejava.web.Configuration;
 
 import static dev.theagencyhq.agency.db.jooq.Tables.*;

@@ -25,6 +25,16 @@ public class KiroTranslator implements Translator {
       """;
 
   @Override
+  public Agent agent() {
+    return Agent.KIRO;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT);
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<>(source.copyTree(StandardTranslator.SKILLS_DIRECTORY, SKILLS_ROOT));
     for (var rule : source.rules()) {

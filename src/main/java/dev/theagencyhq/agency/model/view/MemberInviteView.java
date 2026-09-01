@@ -4,10 +4,8 @@
  */
 package dev.theagencyhq.agency.model.view;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.Role;
 
 /**
  * The invite form, carrying what was submitted so a rejected submission re-renders with the values still in place.

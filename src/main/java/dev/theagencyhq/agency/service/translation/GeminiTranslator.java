@@ -18,6 +18,17 @@ public class GeminiTranslator implements Translator {
   public static final String OUTPUT_ROOT = ".gemini";
 
   @Override
+  public Agent agent() {
+    return Agent.GEMINI;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT) || Translator.under(path, StandardTranslator.SKILLS_ROOT)
+        || path.equals(StandardTranslator.AGENTS_FILE);
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<BriefFile>();
     for (var agent : source.agents()) {

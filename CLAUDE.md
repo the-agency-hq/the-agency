@@ -69,7 +69,17 @@ subagent (`AgentDefinition`), and its `<agent>/` escape hatch verbatim. Codex ha
 go into `.codex/config.toml` as `developer_instructions`. `docs/research/2026-08-27-agent-rules-research.md` records
 what each Agent reads. Unchanged content checksums skip the insert. Versions are immutable and insert-only;
 `POST /api/v1/briefing` serves them, and its wire contract is frozen by the already-shipped Handler. Adding an Agent
-type is one `Translator` plus an entry in `BriefBuilder.TRANSLATORS`.
+type is one `Translator` (with `agent()` and `reads(path)`), an `Agent` enum constant, and an entry in
+`BriefBuilder.TRANSLATORS`.
+
+**Agent selection.** `organizations.agents` (JSONB, `NULL` = All) holds the Agents an Organization uses; it rides
+on `Organization.agents` into the stored Brief document, so it feeds the checksum. The stored Brief always holds
+every Translator's output; `BriefReducer` narrows it to the files the selected Agents read (each `Translator.reads`)
+only on the way out of the Briefing API. Changing the selection (`OrganizationService.updateAgents`) republishes the
+latest Brief as a new version in one transaction with the row update, so Handlers resync on their next poll.
+
+**Build gotcha.** `@JSON` is `SOURCE`-retained, and the compile is incremental: after editing a `@JSON` record that
+references another `@JSON` type, a stale `not @JSON-annotated` error means run `latte clean` first.
 
 **GitHub seam.** `GitHubClient` is an interface; `GitHubHTTPClient` is the real REST implementation. It is the
 app's only outbound dependency and the one thing tests fake — `FakeGitHubClient` is injected into `Main`'s

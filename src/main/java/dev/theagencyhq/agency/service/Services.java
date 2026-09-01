@@ -4,12 +4,10 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.web;
 
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.github.GitHubClient;
-import dev.theagencyhq.agency.github.GitHubHTTPClient;
 import org.lattejava.web.Configuration;
 
 /**

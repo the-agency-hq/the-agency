@@ -50,15 +50,15 @@ Users connect a GitHub repository to an Organization. This app polls GitHub for 
 
 Connecting a repository goes through a GitHub App (not an OAuth App). Register one per environment — its callback and setup URLs are single values, so a development App points at `http://localhost:8080` — and configure it as follows:
 
-| Setting | Value |
-|---------|-------|
-| Callback URL | `<base URL>/app/oauth/github/callback` |
-| Expire user authorization tokens | On |
+| Setting                                                | Value                                                                                                                   |
+|--------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| Callback URL                                           | `<base URL>/app/oauth/github/callback`                                                                                  |
+| Expire user authorization tokens                       | On                                                                                                                      |
 | Request user authorization (OAuth) during installation | Off (with it on, GitHub ignores the Setup URL and sends installs to the callback URL, which also returns to the picker) |
-| Setup URL | `<base URL>/app/oauth/github/setup` |
-| Redirect on update | On |
-| Repository permissions | Contents: read, Metadata: read |
-| Webhook | Off (not used) |
+| Setup URL                                              | `<base URL>/app/oauth/github/setup`                                                                                     |
+| Redirect on update                                     | On                                                                                                                      |
+| Repository permissions                                 | Contents: read, Metadata: read                                                                                          |
+| Webhook                                                | Off (not used)                                                                                                          |
 
 Then put the App's slug and OAuth credentials in `~/.config/the-agency-hq/the-agency/config.properties`:
 
@@ -69,6 +69,10 @@ github.clientSecret=...
 ```
 
 Connecting a repository is then: create an Organization, connect GitHub from its page (the OAuth authorization), and pick a repository. The picker lists every repository the App is installed on that your GitHub user can see. Its install links send you to GitHub to install the App on another account or change what an installation covers, and GitHub returns you to the picker, which lists again.
+
+### Agent selection
+
+An Organization's Owners choose which Agents it uses, from the Organization's (**Agents**) page. The default is **All**. Every Brief is still built and stored for every Agent; the selection is applied when a Handler polls, which is served only the files the selected Agents read (shared files such as `.agents/skills/` stay as long as one selected Agent reads them). Changing the selection publishes the latest Brief again as a new version, so Handlers pick it up on their next poll without a rebuild. The selection is stored as JSON on the `organizations` row (`NULL` = All).
 
 ## Building and testing
 
@@ -82,6 +86,15 @@ This project uses Latte's CLI as the build and project management system. Here a
 | `latte test`          | Runs the tests                                                 |
 | `latte run`           | Runs the webapp locally                                        |
 | `latte deploy`        | Deploys the webapp to Railway                                  |
+
+## Coming soon
+
+- [ ] Subagent translation beyond name, description and prompt: tools, permission mode, skills, turn limits, effort.
+- [ ] Build-time warnings surfaced in the admin UI (persistent): per-agent size caps, skill name rules.
+- [ ] Commands translated to each agent's slash-command format.
+- [ ] Hooks translated to each agent's hook format.
+- [ ] Per-agent skill extensions, such as Codex's `agents/openai.yaml`.
+- [ ] Qwen Code support.
 
 # Contributing
 

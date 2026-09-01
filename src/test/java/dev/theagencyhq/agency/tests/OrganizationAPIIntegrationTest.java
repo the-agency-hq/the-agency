@@ -4,8 +4,8 @@
  */
 package dev.theagencyhq.agency.tests;
 
-import module java.base;
 import module dev.theagencyhq.agency;
+import module java.base;
 import module org.lattejava.web;
 import module org.testng;
 
@@ -53,10 +53,10 @@ public class OrganizationAPIIntegrationTest extends BaseTest {
     var beta = insertOrganization("beta");
 
     // Invisible to the caller: an Organization they were merely invited to, and one they have no row in at all.
-    var invited = new Organization(UUID.randomUUID(), "gamma-invited", null, TEST_INSTANT, TEST_INSTANT);
+    var invited = new Organization(UUID.randomUUID(), "gamma-invited", null, null, TEST_INSTANT, TEST_INSTANT);
     db.insertOrganization(invited);
     insertMember(invited, testUser, Role.CONTRIBUTOR, MembershipState.PENDING);
-    db.insertOrganization(new Organization(UUID.randomUUID(), "delta-foreign", null, TEST_INSTANT, TEST_INSTANT));
+    db.insertOrganization(new Organization(UUID.randomUUID(), "delta-foreign", null, null, TEST_INSTANT, TEST_INSTANT));
 
     organizations()
         .assertStatus(200)

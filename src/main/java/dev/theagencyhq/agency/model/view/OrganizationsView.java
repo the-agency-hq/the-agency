@@ -4,10 +4,8 @@
  */
 package dev.theagencyhq.agency.model.view;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.model.Role;
-import dev.theagencyhq.agency.model.SourceStatus;
 
 /**
  * The Organization listing page: the viewer's pending invitations first, then one row per Organization they are a

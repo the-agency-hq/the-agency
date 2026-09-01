@@ -4,17 +4,10 @@
  */
 package dev.theagencyhq.agency.controller;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
-
-import dev.theagencyhq.agency.Main;
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.model.MembershipState;
-import dev.theagencyhq.agency.model.Role;
-import dev.theagencyhq.agency.model.User;
-import dev.theagencyhq.agency.service.GitHubLinkService;
-import dev.theagencyhq.agency.service.Services;
 
 /**
  * The two round trips between the Agency and GitHub. The OAuth handshake: send the operator to GitHub to authorize

@@ -4,9 +4,8 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.model.github.RepositoryContents;
 
 /**
  * Resolves the Mission Types that apply to a source file, per the design's §8.3. First match wins: a sibling

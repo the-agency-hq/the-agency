@@ -4,9 +4,8 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.model.*;
 
 /**
  * What the Briefing API should tell a Handler. Sealed so no caller can forget a case.

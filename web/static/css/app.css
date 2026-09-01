@@ -38,6 +38,7 @@
     --color-cyan-400: oklch(78.9% 0.154 211.53);
     --color-cyan-500: oklch(71.5% 0.143 215.221);
     --color-cyan-600: oklch(60.9% 0.126 221.723);
+    --color-cyan-700: oklch(52% 0.105 223.128);
     --color-blue-800: oklch(42.4% 0.199 265.638);
     --color-indigo-50: oklch(96.2% 0.018 272.314);
     --color-indigo-100: oklch(93% 0.034 272.788);
@@ -1174,6 +1175,9 @@
   .text-brand-700 {
     color: var(--color-brand-700);
   }
+  .text-cyan-700 {
+    color: var(--color-cyan-700);
+  }
   .text-emerald-700 {
     color: var(--color-emerald-700);
   }
@@ -1568,6 +1572,12 @@
   .has-focus-visible\:outline-2:has(:focus-visible) {
     outline-style: var(--tw-outline-style);
     outline-width: 2px;
+  }
+  .has-disabled\:cursor-default:has(:disabled) {
+    cursor: default;
+  }
+  .has-disabled\:opacity-50:has(:disabled) {
+    opacity: 50%;
   }
   @media (width >= 40rem) {
     .sm\:col-span-2 {

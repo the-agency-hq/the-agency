@@ -4,33 +4,12 @@
  */
 package dev.theagencyhq.agency.controller;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
 
-import dev.theagencyhq.agency.Main;
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.error.ValidationException;
-import dev.theagencyhq.agency.github.GitHubClient;
-import dev.theagencyhq.agency.github.GitHubException;
-import dev.theagencyhq.agency.github.GitHubUnauthorizedException;
-import dev.theagencyhq.agency.model.github.GitHubRepository;
-import dev.theagencyhq.agency.model.BriefFile;
-import dev.theagencyhq.agency.model.BriefSource;
 import dev.theagencyhq.agency.model.Member;
-import dev.theagencyhq.agency.model.MembershipState;
-import dev.theagencyhq.agency.model.Organization;
-import dev.theagencyhq.agency.model.User;
-import dev.theagencyhq.agency.model.view.BriefFileView;
-import dev.theagencyhq.agency.model.view.BriefVersionView;
-import dev.theagencyhq.agency.model.view.OrganizationConnectView;
-import dev.theagencyhq.agency.model.view.OrganizationDetailView;
-import dev.theagencyhq.agency.model.view.OrganizationsView;
-import dev.theagencyhq.agency.security.OrganizationSecurity;
-import dev.theagencyhq.agency.service.GitHubLinkService;
-import dev.theagencyhq.agency.service.OrganizationService;
-import dev.theagencyhq.agency.service.PollerService;
-import dev.theagencyhq.agency.service.Services;
 
 /**
  * The admin UI: create an Organization, connect it to a GitHub repository, trigger a rebuild, and inspect exactly
@@ -86,6 +65,21 @@ public class OrganizationController {
     } catch (NumberFormatException e) {
       return null;
     }
+  }
+
+  /**
+   * The Agent selection form. Renders the stored selection: All when the Organization has never narrowed it,
+   * otherwise the Agents it picked.
+   */
+  public void agentsForm(HTTPRequest req, HTTPResponse res) throws IOException {
+    var organization = findOrganization(req);
+    if (organization == null) {
+      Main.missing(req, res);
+      return;
+    }
+
+    render("pages/agents.jte", req, res, new OrganizationAgentsView(organization, organization.agents() == null,
+        organization.agents() == null ? List.of() : organization.agents().enabled(), List.of()));
   }
 
   /**
@@ -274,6 +268,39 @@ public class OrganizationController {
     renderForm(req, res, List.of(), "");
   }
 
+  /**
+   * Saves the Agent selection. {@code all} wins whenever it is present -- with scripting, the individual boxes are
+   * disabled and not submitted while All is checked; without it, they may arrive alongside and are ignored. A
+   * rejected selection re-renders the form as submitted, so the reason shows next to what produced it.
+   */
+  public void updateAgents(HTTPRequest req, HTTPResponse res) throws IOException {
+    var organization = findOrganization(req);
+    if (organization == null) {
+      Main.missing(req, res);
+      return;
+    }
+
+    var all = req.getParameter("all") != null;
+    var selected = new ArrayList<Agent>();
+    var submitted = req.getParameters("agents");
+    for (var value : submitted == null ? List.<String>of() : submitted) {
+      // An unknown value is a stale or hand-edited form, not a selection; dropping it is what rejecting a
+      // now-empty selection below is for.
+      try {
+        selected.add(Agent.valueOf(value));
+      } catch (IllegalArgumentException _) {
+        // Ignored.
+      }
+    }
+
+    try {
+      organizationService.updateAgents(organization, all ? null : new Agents(selected));
+      res.sendRedirect("/app/organizations/" + organization.id(), 303);
+    } catch (ValidationException e) {
+      render("pages/agents.jte", req, res, new OrganizationAgentsView(organization, all, selected, e.errors()));
+    }
+  }
+
   public void rebuild(HTTPRequest req, HTTPResponse res) throws IOException {
     var organization = findOrganization(req);
     if (organization == null) {
@@ -320,7 +347,7 @@ public class OrganizationController {
     }
 
     var view = new BriefVersionView(organization, brief.version(), brief.checksum(), brief.sourceCommit(),
-        brief.insertInstant(), entries);
+        brief.insertInstant(), brief.organization().agents(), entries);
     render("pages/version.jte", req, res, view);
   }
 

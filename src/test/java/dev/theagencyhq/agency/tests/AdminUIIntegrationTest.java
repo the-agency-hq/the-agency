@@ -4,11 +4,10 @@
  */
 package dev.theagencyhq.agency.tests;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.web;
 import module org.testng;
-
-import dev.theagencyhq.agency.Main;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;

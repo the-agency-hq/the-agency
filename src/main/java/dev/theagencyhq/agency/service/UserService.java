@@ -4,10 +4,9 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.jwt;
-
-import dev.theagencyhq.agency.model.User;
 
 /**
  * Translates a validated access token into a {@link User}. Passed to {@code OIDC.api} as the profile's translator,

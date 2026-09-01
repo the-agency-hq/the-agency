@@ -1,3 +1,4 @@
+@import dev.theagencyhq.agency.model.Agents
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.BriefVersionView
 
@@ -29,6 +30,10 @@
       <div>
         <dt class="dossier-label">Created</dt>
         <dd class="mt-1 text-sm text-slate-600 dark:text-slate-400">${model.insertInstant().toString()}</dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="dossier-label">Agents</dt>
+        <dd class="mt-1 text-sm text-slate-600 dark:text-slate-400">${Agents.describe(model.agents())}</dd>
       </div>
     </dl>
   </section>

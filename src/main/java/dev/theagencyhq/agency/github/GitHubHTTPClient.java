@@ -4,10 +4,10 @@
  */
 package dev.theagencyhq.agency.github;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module java.net.http;
 
-import dev.theagencyhq.agency.model.github.*;
 import dev.theagencyhq.agency.model.github.internal.*;
 
 /**

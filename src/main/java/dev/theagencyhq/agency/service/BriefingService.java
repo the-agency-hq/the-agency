@@ -4,11 +4,8 @@
  */
 package dev.theagencyhq.agency.service;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.db.*;
-import dev.theagencyhq.agency.model.*;
-import dev.theagencyhq.agency.model.api.*;
 
 /**
  * Decides what a Handler is told. A pure function over who is asking, what their Handler asserted, and what the
@@ -68,7 +65,9 @@ public class BriefingService {
       var brief = latestBriefs.get(id);
       var current = assertedByOrganization.get(id);
       if (current == null || current.version() != brief.version() || !current.checksum().equals(brief.checksum())) {
-        stale.add(brief);
+        // Reduced on the way out, after the comparison: the version and checksum the Handler echoes are the
+        // stored ones, and the stored Brief carries every file whatever the Organization's Agent selection is.
+        stale.add(BriefReducer.reduce(brief));
       }
     }
 

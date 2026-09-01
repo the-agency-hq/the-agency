@@ -4,10 +4,8 @@
  */
 package dev.theagencyhq.agency.service.validation;
 
+import module dev.theagencyhq.agency;
 import module java.base;
-
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.error.ValidationException;
 
 /**
  * Validates a new Organization's name. The name is display text and carries no character-set restriction: nothing

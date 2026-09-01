@@ -24,6 +24,7 @@
   <script src="/static/js/copy-0.1.0.js" defer></script>
   <script src="/static/js/connect-0.1.0.js" defer></script>
   <script src="/static/js/click-action-0.1.0.js" defer></script>
+  <script src="/static/js/agents-0.1.0.js" defer></script>
   <link rel="stylesheet" href="/static/css/app.css"/>
 </head>
 <body class="bg-white text-slate-900 dark:bg-navy-950 dark:text-slate-100 transition-colors duration-200">

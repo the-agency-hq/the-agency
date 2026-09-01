@@ -18,6 +18,17 @@ public class KimiTranslator implements Translator {
   public static final String OUTPUT_ROOT = ".kimi-code";
 
   @Override
+  public Agent agent() {
+    return Agent.KIMI;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT) || Translator.under(path, StandardTranslator.SKILLS_ROOT)
+        || Translator.under(path, StandardTranslator.AGENTS_ROOT);
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<BriefFile>();
     var rules = source.rules();

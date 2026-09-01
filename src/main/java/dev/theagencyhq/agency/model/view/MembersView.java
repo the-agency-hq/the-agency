@@ -4,10 +4,10 @@
  */
 package dev.theagencyhq.agency.model.view;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 
 import dev.theagencyhq.agency.model.Member;
-import dev.theagencyhq.agency.model.Organization;
 
 /**
  * The members page: every member of the Organization, enriched from FusionAuth.

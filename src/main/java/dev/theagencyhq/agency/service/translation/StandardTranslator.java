@@ -31,6 +31,16 @@ public class StandardTranslator implements Translator {
   public static final String SKILLS_ROOT = ".agents/skills";
 
   @Override
+  public Agent agent() {
+    return null;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return false;
+  }
+
+  @Override
   public List<BriefFile> translate(SourceTree source) {
     var files = new ArrayList<>(source.copyTree(SKILLS_DIRECTORY, SKILLS_ROOT));
     for (var agent : source.agents()) {

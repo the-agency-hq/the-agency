@@ -4,11 +4,10 @@
  */
 package dev.theagencyhq.agency.tests;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.web;
 import module org.testng;
-
-import dev.theagencyhq.agency.model.*;
 
 /**
  * {@code POST /api/v1/briefing} end to end, including the whole §10.2 decision matrix — the scenarios that used to
@@ -82,12 +81,12 @@ public class BriefingAPIIntegrationTest extends BaseTest {
    */
   @Test
   public void anOrganizationTheCallerDoesNotBelongToIsNotEntitled() throws Exception {
-    var foreign = new Organization(UUID.randomUUID(), "briefing-foreign-" + UUID.randomUUID(), null, TEST_INSTANT,
+    var foreign = new Organization(UUID.randomUUID(), "briefing-foreign-" + UUID.randomUUID(), null, null, TEST_INSTANT,
         TEST_INSTANT);
     db.insertOrganization(foreign);
     insertBrief(foreign, "sum-foreign", briefFile("agents.md", "foreign\n"));
 
-    var invited = new Organization(UUID.randomUUID(), "briefing-invited-" + UUID.randomUUID(), null, TEST_INSTANT,
+    var invited = new Organization(UUID.randomUUID(), "briefing-invited-" + UUID.randomUUID(), null, null, TEST_INSTANT,
         TEST_INSTANT);
     db.insertOrganization(invited);
     insertMember(invited, testUser, Role.CONTRIBUTOR, MembershipState.PENDING);

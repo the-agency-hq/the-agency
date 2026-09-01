@@ -4,15 +4,10 @@
  */
 package dev.theagencyhq.agency.service.validation;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 
-import dev.theagencyhq.agency.db.DatabaseService;
-import dev.theagencyhq.agency.error.ValidationException;
-import dev.theagencyhq.agency.model.InviteRequest;
 import dev.theagencyhq.agency.model.Member;
-import dev.theagencyhq.agency.model.MembershipState;
-import dev.theagencyhq.agency.model.Role;
-import dev.theagencyhq.agency.model.User;
 
 /**
  * The membership rules, ported from {@code latte-java/app}. The one that matters is the last-owner rule: every path

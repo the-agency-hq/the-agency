@@ -16,9 +16,21 @@ import module java.base;
  * and this Translator carries every concept itself.
  */
 public class ClaudeTranslator implements Translator {
+  public static final String AGENTS_ROOT = ".claude/agents";
   public static final String ESCAPE_HATCH = "claude";
   public static final String OUTPUT_ROOT = ".claude";
   public static final List<String> SHARED_DIRECTORIES = List.of("agents", "rules", "skills");
+  public static final String SKILLS_ROOT = ".claude/skills";
+
+  @Override
+  public Agent agent() {
+    return Agent.CLAUDE;
+  }
+
+  @Override
+  public boolean reads(String path) {
+    return Translator.under(path, OUTPUT_ROOT);
+  }
 
   @Override
   public List<BriefFile> translate(SourceTree source) {

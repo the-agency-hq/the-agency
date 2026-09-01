@@ -4,9 +4,8 @@
  */
 package dev.theagencyhq.agency.model.github;
 
+import module dev.theagencyhq.agency;
 import module org.lattejava.json;
-
-import dev.theagencyhq.agency.model.*;
 
 /**
  * An Organization's GitHub authorization, nested on {@link Organization} exactly as its columns sit on the

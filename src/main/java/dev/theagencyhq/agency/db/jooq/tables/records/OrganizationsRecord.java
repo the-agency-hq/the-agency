@@ -9,6 +9,7 @@ import dev.theagencyhq.agency.db.jooq.tables.Organizations;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.jooq.JSONB;
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
 
@@ -147,6 +148,20 @@ public class OrganizationsRecord extends UpdatableRecordImpl<OrganizationsRecord
         return (Instant) get(8);
     }
 
+    /**
+     * Setter for <code>public.organizations.agents</code>.
+     */
+    public void setAgents(JSONB value) {
+        set(9, value);
+    }
+
+    /**
+     * Getter for <code>public.organizations.agents</code>.
+     */
+    public JSONB getAgents() {
+        return (JSONB) get(9);
+    }
+
     // -------------------------------------------------------------------------
     // Primary key information
     // -------------------------------------------------------------------------
@@ -170,7 +185,7 @@ public class OrganizationsRecord extends UpdatableRecordImpl<OrganizationsRecord
     /**
      * Create a detached, initialised OrganizationsRecord
      */
-    public OrganizationsRecord(UUID id, String name, String githubLogin, String githubAccessToken, Instant githubAccessExpiration, String githubRefreshToken, Instant githubRefreshExpiration, Instant insertInstant, Instant updateInstant) {
+    public OrganizationsRecord(UUID id, String name, String githubLogin, String githubAccessToken, Instant githubAccessExpiration, String githubRefreshToken, Instant githubRefreshExpiration, Instant insertInstant, Instant updateInstant, JSONB agents) {
         super(Organizations.ORGANIZATIONS);
 
         setId(id);
@@ -182,6 +197,7 @@ public class OrganizationsRecord extends UpdatableRecordImpl<OrganizationsRecord
         setGithubRefreshExpiration(githubRefreshExpiration);
         setInsertInstant(insertInstant);
         setUpdateInstant(updateInstant);
+        setAgents(agents);
         resetTouchedOnNotNull();
     }
 }

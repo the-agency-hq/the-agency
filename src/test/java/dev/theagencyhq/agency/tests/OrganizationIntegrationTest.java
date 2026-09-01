@@ -24,6 +24,39 @@ public class OrganizationIntegrationTest extends BaseTest {
   public StringBodyAsserter string = new StringBodyAsserter();
 
   /**
+   * The repository the Organization already builds from is not "another Organization's". Picking it again — to
+   * change the branch, or to change nothing at all — goes through like any other connect, replacing the source and
+   * its history, rather than re-rendering the picker with a collision against the Organization itself.
+   */
+  @Test
+  public void connectAcceptsTheRepositoryTheOrganizationAlreadyHolds() throws Exception {
+    github.add("acme", "briefs").addBranch("trunk");
+    var organizationId = createOrganization("org-same-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+    postConnect(organizationId, "acme/briefs", "main")
+        .assertRedirect(303, "/app/organizations/" + organizationId)
+        .reset(ResetItem.Request);
+    rebuild(organizationId);
+    assertNotNull(db.findSource(organizationId).orElseThrow().lastBuiltCommit());
+
+    postConnect(organizationId, "acme/briefs", "main")
+        .assertRedirect(303, "/app/organizations/" + organizationId)
+        .reset(ResetItem.Request);
+
+    var same = db.findSource(organizationId).orElseThrow();
+    assertEquals(same.fullName(), "acme/briefs");
+    assertEquals(same.branch(), "main");
+    assertNull(same.lastBuiltCommit());
+
+    postConnect(organizationId, "acme/briefs", "trunk")
+        .assertRedirect(303, "/app/organizations/" + organizationId)
+        .reset(ResetItem.Request);
+
+    assertEquals(db.findSource(organizationId).orElseThrow().branch(), "trunk");
+    assertEquals(db.listSources().size(), 1);
+  }
+
+  /**
    * One repository serves one Organization, case-insensitively, because GitHub repository names are. The picker
    * re-renders with the reason and stores nothing; the {@code LOWER()} unique index below the validator remains
    * the backstop that makes a racing duplicate genuinely impossible rather than merely reported.

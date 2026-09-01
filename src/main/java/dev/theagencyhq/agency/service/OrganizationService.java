@@ -39,7 +39,7 @@ public class OrganizationService {
    */
   public BriefSource connect(UUID organizationId, String accessToken, String owner, String repository,
                              String branch) {
-    SourceValidator.validate(owner, repository, branch, accessToken, database, github);
+    SourceValidator.validate(organizationId, owner, repository, branch, accessToken, database, github);
 
     var now = Instant.now();
     var source = new BriefSource(UUID.randomUUID(), organizationId, owner, repository, branch, null, null, null,

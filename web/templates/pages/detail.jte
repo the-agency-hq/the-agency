@@ -43,21 +43,17 @@
         </div>`)
 
   @if(model.invited())
-    <div class="mb-6 rounded-xl border border-cyan-200 dark:border-accent-500/30 bg-cyan-50 dark:bg-accent-500/10 px-4 py-4" role="status">
-      <div class="flex flex-wrap items-center gap-4">
-        <div class="flex-1 min-w-48">
-          <p class="text-sm font-semibold text-slate-900 dark:text-white">You've been invited to this Organization.</p>
-          <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Accept to join as ${model.membership().role().label()}.</p>
-        </div>
-        <div class="flex items-center gap-3">
+    <div class="mb-6">
+      @template.components.admonition(
+        title = @`You've been invited to this Organization.`,
+        content = @`Accept to join as ${model.membership().role().label()}.`,
+        actions = @`
           <form method="post" action="/app/organizations/${organizationId}/members/accept">
             <button type="submit" class="rounded-lg bg-accent-700 hover:bg-accent-800 dark:bg-accent-500 dark:hover:bg-accent-400 px-4 py-2 text-sm font-semibold text-white dark:text-navy-950 transition-colors">Accept</button>
           </form>
           <form method="post" action="/app/organizations/${organizationId}/members/decline">
             <button type="submit" class="rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">Decline</button>
-          </form>
-        </div>
-      </div>
+          </form>`)
     </div>
   @endif
 
@@ -65,31 +61,31 @@
        parameter on the page it returns to. Rendered from a fixed set of known values rather than echoed, so
        nothing an attacker can put in the URL reaches the page. --%>
   @if("linked".equals(model.status()))
-    <div class="mb-6 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3" role="status">
-      <p class="text-sm text-emerald-800 dark:text-emerald-300">GitHub is connected.</p>
+    <div class="mb-6">
+      @template.components.admonition(type = "success", content = @`GitHub is connected.`)
     </div>
   @elseif("exchange_failed".equals(model.status()))
-    <div class="mb-6 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3" role="alert">
-      <p class="text-sm text-amber-800 dark:text-amber-300">GitHub did not complete the authorization. This is what a declined or an already-used authorization looks like — try again.</p>
+    <div class="mb-6">
+      @template.components.admonition(type = "warning", content = @`GitHub did not complete the authorization. This is what a declined or an already-used authorization looks like — try again.`)
     </div>
   @endif
 
   @if(model.needsGitHubConnection())
-    <div class="mb-6 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-4" role="alert">
-      <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">This Organization is not connected to GitHub.</p>
-      <p class="mt-1 text-sm text-amber-800 dark:text-amber-300">
-        Briefs are built from a GitHub repository, and nothing can be built or updated until the Organization is
-        connected — or reconnected, if an earlier authorization has been revoked or has expired.
-      </p>
-      <%-- Only an Owner can grant the credential -- the OAuth start route is Owner-gated -- so only an Owner is
-           shown the button that starts it. --%>
-      @if(model.canManage())
-        <a href="/app/oauth/github/start?organizationId=${organizationId}"
-           class="mt-4 inline-flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 px-4 py-2 text-sm font-semibold text-white dark:text-navy-950 transition-colors">
-          <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-          Connect to GitHub
-        </a>
-      @endif
+    <div class="mb-6">
+      @template.components.admonition(
+        type = "warning",
+        title = @`This Organization is not connected to GitHub.`,
+        content = @`Briefs are built from a GitHub repository, and nothing can be built or updated until the Organization is connected — or reconnected, if an earlier authorization has been revoked or has expired.`,
+        actions = @`
+          <%-- Only an Owner can grant the credential -- the OAuth start route is Owner-gated -- so only an Owner is
+               shown the button that starts it. --%>
+          @if(model.canManage())
+            <a href="/app/oauth/github/start?organizationId=${organizationId}"
+               class="inline-flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 px-4 py-2 text-sm font-semibold text-white dark:text-navy-950 transition-colors">
+              <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+              Connect to GitHub
+            </a>
+          @endif`)
     </div>
   @endif
 

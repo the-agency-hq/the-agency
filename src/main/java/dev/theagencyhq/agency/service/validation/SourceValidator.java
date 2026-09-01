@@ -26,18 +26,21 @@ public final class SourceValidator {
   }
 
   /**
-   * @param owner       The repository owner, as the form supplied it.
-   * @param repository  The repository name, as the form supplied it.
-   * @param branch      The branch to build from, as the form supplied it.
-   * @param accessToken The connecting user's GitHub token.
-   * @param database    The database, for the uniqueness check.
-   * @param github      The GitHub client.
+   * @param organizationId The Organization the repository is being registered to. Its own current source does not
+   *                       count against the one-repository-per-Organization rule, so picking the repository it
+   *                       already holds — to change the branch, or to change nothing — is not a collision.
+   * @param owner          The repository owner, as the form supplied it.
+   * @param repository     The repository name, as the form supplied it.
+   * @param branch         The branch to build from, as the form supplied it.
+   * @param accessToken    The connecting user's GitHub token.
+   * @param database       The database, for the uniqueness check.
+   * @param github         The GitHub client.
    * @throws GitHubUnauthorizedException If GitHub rejected the token — the connection's problem rather than the
    *     repository's, so it is the caller's to handle, not a validation error.
    * @throws ValidationException with every reason this repository cannot be registered.
    */
-  public static void validate(String owner, String repository, String branch, String accessToken,
-                              DatabaseService database, GitHubClient github) {
+  public static void validate(UUID organizationId, String owner, String repository, String branch,
+                              String accessToken, DatabaseService database, GitHubClient github) {
     var errors = new ArrayList<String>();
     var trimmedOwner = owner == null ? "" : owner.trim();
     var trimmedRepository = repository == null ? "" : repository.trim();
@@ -53,7 +56,8 @@ public final class SourceValidator {
     // Only when the fields are present at all: everything below asks GitHub about them, and asking about an empty
     // string produces a second, less useful error for a mistake already reported.
     if (errors.isEmpty()) {
-      var error = repositoryError(trimmedOwner, trimmedRepository, trimmedBranch, accessToken, database, github);
+      var error = repositoryError(organizationId, trimmedOwner, trimmedRepository, trimmedBranch, accessToken,
+          database, github);
       if (error != null) {
         errors.add(error);
       }
@@ -69,10 +73,11 @@ public final class SourceValidator {
    *     because the later checks presuppose the earlier ones — asking for a file on a branch that does not exist, or
    *     parsing a settings file the repository does not have, produces noise rather than a second useful error.
    */
-  private static String repositoryError(String owner, String repository, String branch, String accessToken,
-                                        DatabaseService database, GitHubClient github) {
+  private static String repositoryError(UUID organizationId, String owner, String repository, String branch,
+                                        String accessToken, DatabaseService database, GitHubClient github) {
     var fullName = owner + "/" + repository;
-    if (database.findSourceByRepository(owner, repository).isPresent()) {
+    var registered = database.findSourceByRepository(owner, repository).orElse(null);
+    if (registered != null && !registered.organizationId().equals(organizationId)) {
       return "The repository [" + fullName + "] is already registered to another Organization.";
     }
 

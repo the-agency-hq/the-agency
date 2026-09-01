@@ -50,13 +50,14 @@ public record OrganizationDetailView(Organization organization, BriefSource sour
   }
 
   /**
-   * @return True if the page should warn that the Organization has to be (re)connected to GitHub. No credential at
-   *     all, or a credential the last poll proved dead: two ways to be disconnected, one warning, because the
-   *     operator's fix is the same button either way. A dead credential no poll has tripped over yet is
-   *     deliberately not chased down here — the next cycle is at most a minute away and will record it.
+   * @return True if the page should warn that the Organization has to be (re)connected to GitHub, which is exactly
+   *     when it holds no credential. Every path that proves a credential dead — a refresh GitHub rejects, a poll or a
+   *     picker it refuses — removes it from the row on the spot, so a missing credential is the one disconnected
+   *     state there is. The source's last poll status is deliberately not consulted: it reads NOT_CONNECTED until
+   *     the cycle after a reconnect, so a stored credential beside that status is what an Organization reconnected
+   *     a moment ago looks like, not a disconnected one.
    */
   public boolean needsGitHubConnection() {
-    return organization.gitHubConnection() == null
-        || (source != null && source.lastStatus() == SourceStatus.NOT_CONNECTED);
+    return organization.gitHubConnection() == null;
   }
 }

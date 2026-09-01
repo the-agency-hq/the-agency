@@ -176,6 +176,39 @@ public class GitHubConnectionIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("not connected to GitHub").contains("/app/oauth/github/start"));
   }
 
+  /**
+   * The reconnect that follows a revocation is judged by the row, not by the last poll. The cycle that discovered
+   * the revocation left NOT_CONNECTED on the source, and none has run since the new credential was stored — the
+   * suite's poller thread is switched off, so nothing can have — which is exactly the window in which the page
+   * used to warn that the Organization was not connected while reporting, in the same breath, that GitHub was.
+   * The picker link and the picker itself have to be back in that window too.
+   */
+  @Test
+  public void reconnectingAfterARevocationClearsTheWarningBeforeTheNextPoll() {
+    github.add("acme", "briefs").putFile("rules/a.md", "first\n");
+    var organizationId = createOrganization("github-reconnect-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+    connect(organizationId, "acme", "briefs");
+    assertEquals(runCycle(organizationId), SourceStatus.OK);
+    github.revokeAll();
+    assertEquals(runCycle(organizationId), SourceStatus.NOT_CONNECTED);
+
+    var state = startConnection(organizationId);
+    test.get(GitHubController.CALLBACK_PATH + "?code=the-code&state=" + state)
+        .assertRedirect(303, "/app/organizations/" + organizationId + "?status=linked");
+
+    assertEquals(db.findSource(organizationId).orElseThrow().lastStatus(), SourceStatus.NOT_CONNECTED);
+    test.get("/app/organizations/" + organizationId + "?status=linked")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("GitHub is connected.")
+                                    .doesNotContain("not connected to GitHub")
+                                    .contains("Change repository"));
+
+    test.get("/app/organizations/" + organizationId + "/connect")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("acme/briefs").contains("Use this repository"));
+  }
+
   @Test
   public void anExchangeGitHubRejectsLinksNothing() {
     var organizationId = createOrganization("github-badcode-" + UUID.randomUUID());

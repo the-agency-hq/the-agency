@@ -16,12 +16,12 @@
     <%-- The install trip ends in a redirect, so its outcome arrives as a query parameter. Rendered from a fixed
          set of known values rather than echoed, so nothing an attacker can put in the URL reaches the page. --%>
     @if("installed".equals(model.status()))
-      <div class="mb-6 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3" role="status">
-        <p class="text-sm text-emerald-800 dark:text-emerald-300">GitHub access updated. The repositories the app can see now are listed below.</p>
+      <div class="mb-6">
+        @template.components.admonition(type = "success", content = @`GitHub access updated. The repositories the app can see now are listed below.`)
       </div>
     @elseif("install_requested".equals(model.status()))
-      <div class="mb-6 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-4 py-3" role="status">
-        <p class="text-sm text-amber-800 dark:text-amber-300">Your request to install the app is waiting for an owner of that GitHub account to approve it. Its repositories appear here once they do.</p>
+      <div class="mb-6">
+        @template.components.admonition(type = "warning", content = @`Your request to install the app is waiting for an owner of that GitHub account to approve it. Its repositories appear here once they do.`)
       </div>
     @endif
 

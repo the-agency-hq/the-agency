@@ -42,6 +42,7 @@ public class GitHubController {
   private final String installURL;
   private final GitHubLinkService links;
   private final OIDC<User> oidc;
+  private final PollerService poller;
 
   /**
    * @param cookies    The cookie codec, for the encrypted state cookie.
@@ -56,6 +57,7 @@ public class GitHubController {
     this.installURL = installURL;
     this.links = Services.gitHubLinkService();
     this.oidc = oidc;
+    this.poller = Services.pollerService();
   }
 
   public void callback(HTTPRequest req, HTTPResponse res) {
@@ -91,6 +93,12 @@ public class GitHubController {
     if (result == GitHubLinkService.LinkResult.LINK_FAILED) {
       res.sendRedirect("/app/organizations/?status=" + result.name().toLowerCase(Locale.ROOT), 303);
       return;
+    }
+
+    if (result == GitHubLinkService.LinkResult.LINKED) {
+      // The page this returns to reads the connection off the row, so it is right at once. The source's status,
+      // badge, and last error are the poller's to update, and would otherwise say NOT_CONNECTED for a full interval.
+      poller.nudge();
     }
 
     // An App with "Request user authorization (OAuth) during installation" enabled sends installs here rather than

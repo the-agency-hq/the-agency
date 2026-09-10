@@ -1,11 +1,13 @@
 @import dev.theagencyhq.agency.model.User
 @import java.util.List
+@import org.lattejava.http.server.HTTPRequest
 
 @param List<String> errors = List.of()
 @param String name = ""
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = "New Organization", content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = "New Organization", content = @`
   @template.components.page-header(
       label = "Register",
       title = "New Organization",

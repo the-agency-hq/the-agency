@@ -53,10 +53,10 @@ public class OrganizationAPIIntegrationTest extends BaseTest {
     var beta = insertOrganization("beta");
 
     // Invisible to the caller: an Organization they were merely invited to, and one they have no row in at all.
-    var invited = new Organization(UUID.randomUUID(), "gamma-invited", null, null, TEST_INSTANT, TEST_INSTANT);
-    db.insertOrganization(invited);
+    var invited = new Organization(UUID.randomUUID(), "gamma-invited", null, TEST_INSTANT, TEST_INSTANT);
+    organizations.create(invited);
     insertMember(invited, testUser, Role.CONTRIBUTOR, MembershipState.PENDING);
-    db.insertOrganization(new Organization(UUID.randomUUID(), "delta-foreign", null, null, TEST_INSTANT, TEST_INSTANT));
+    organizations.create(new Organization(UUID.randomUUID(), "delta-foreign", null, TEST_INSTANT, TEST_INSTANT));
 
     organizations()
         .assertStatus(200)
@@ -74,18 +74,17 @@ public class OrganizationAPIIntegrationTest extends BaseTest {
   }
 
   /**
-   * A connected Organization must serialize exactly like an unconnected one: {@code gitHubConnection} is a live
-   * bearer credential and is annotated off the wire, and the golden file's whole-body equality is what asserts its
-   * absence rather than something nobody checked.
+   * A connected Organization must serialize exactly like an unconnected one: the GitHub credential is a live
+   * bearer credential that lives on the source row and never on the Organization, and the golden file's whole-body
+   * equality is what asserts its absence rather than something nobody checked.
    */
   @Test
   public void aConnectedOrganizationDoesNotLeakItsCredential() throws Exception {
     var organization = insertOrganization("alpha");
     linkGitHub(organization.id());
 
-    // linkGitHub moved the row's update_instant, so the substituted value is read back rather than reused --
-    // findOrganization returns the connection too, which the golden file must not (and does not) carry.
-    var stored = db.findOrganization(organization.id()).orElseThrow();
+    // Read back rather than reused, so the golden file is compared against the row as it is after the link.
+    var stored = organizations.findById(organization.id()).orElseThrow();
     organizations()
         .assertStatus(200)
         .assertBodyAs(json, b -> b.equalToFile(expected("connected.json"), "organizationId", organization.id(), "updateInstant", stored.updateInstant()));

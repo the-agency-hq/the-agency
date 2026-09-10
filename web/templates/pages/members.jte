@@ -3,11 +3,13 @@
 @import dev.theagencyhq.agency.model.Role
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.MembersView
+@import org.lattejava.http.server.HTTPRequest
 
 @param MembersView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = model.organization().name() + " · Members", content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = model.organization().name() + " · Members", content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(

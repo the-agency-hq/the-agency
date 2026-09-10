@@ -25,22 +25,22 @@ public final class MembershipValidator {
    * @param targetUserId   The member whose role is changing.
    * @param newRole        The role they are changing to.
    * @param current        The signed-in user making the change.
-   * @param database       The database.
+   * @param members        The members.
    * @throws ValidationException if the change is a self-change or would demote the last ACTIVE OWNER.
    */
   public static void validateChangeRole(UUID organizationId, UUID targetUserId, Role newRole, User current,
-                                        DatabaseService database) {
+                                        MemberRepository members) {
     if (current.userId().equals(targetUserId)) {
       throw new ValidationException(List.of("You cannot change your own role."));
     }
 
-    var target = database.findMember(organizationId, targetUserId).orElse(null);
+    var target = members.findByOrganizationIdAndUserId(organizationId, targetUserId).orElse(null);
     if (target == null) {
       return;
     }
 
     if (target.role() == Role.OWNER && target.state() == MembershipState.ACTIVE && newRole != Role.OWNER
-        && database.findActiveOwners(organizationId).size() <= 1) {
+        && members.findAllByOrganizationId(organizationId, Role.OWNER, MembershipState.ACTIVE).size() <= 1) {
       throw new ValidationException(List.of("The last active Owner cannot be demoted."));
     }
   }
@@ -70,17 +70,17 @@ public final class MembershipValidator {
   /**
    * @param organizationId The Organization.
    * @param current        The signed-in user leaving it.
-   * @param database       The database.
+   * @param members        The members.
    * @throws ValidationException if leaving would leave the Organization without an ACTIVE OWNER.
    */
-  public static void validateLeave(UUID organizationId, User current, DatabaseService database) {
-    var member = database.findMember(organizationId, current.userId()).orElse(null);
+  public static void validateLeave(UUID organizationId, User current, MemberRepository members) {
+    var member = members.findByOrganizationIdAndUserId(organizationId, current.userId()).orElse(null);
     if (member == null) {
       return;
     }
 
     if (member.role() == Role.OWNER && member.state() == MembershipState.ACTIVE
-        && database.findActiveOwners(organizationId).size() <= 1) {
+        && members.findAllByOrganizationId(organizationId, Role.OWNER, MembershipState.ACTIVE).size() <= 1) {
       throw new ValidationException(List.of("You are the last active Owner, so you cannot leave. Promote another "
           + "member to Owner first."));
     }
@@ -90,12 +90,12 @@ public final class MembershipValidator {
    * @param organizationId The Organization.
    * @param userId         The FusionAuth user UUID the email resolved to.
    * @param email          The email, for the message.
-   * @param database       The database.
+   * @param members        The members.
    * @throws ValidationException if the user already has a membership row — ACTIVE or a pending invitation.
    */
   public static void validateNoDuplicateMembership(UUID organizationId, UUID userId, String email,
-                                                   DatabaseService database) {
-    if (database.findMember(organizationId, userId).isPresent()) {
+                                                   MemberRepository members) {
+    if (members.findByOrganizationIdAndUserId(organizationId, userId).isPresent()) {
       throw new ValidationException(
           List.of("[" + email + "] is already a member or has a pending invitation."));
     }
@@ -105,21 +105,21 @@ public final class MembershipValidator {
    * @param organizationId The Organization.
    * @param targetUserId   The member being removed.
    * @param current        The signed-in user doing the removing.
-   * @param database       The database.
+   * @param members        The members.
    * @throws ValidationException if the removal is a self-removal or would remove the last ACTIVE OWNER.
    */
-  public static void validateRemove(UUID organizationId, UUID targetUserId, User current, DatabaseService database) {
+  public static void validateRemove(UUID organizationId, UUID targetUserId, User current, MemberRepository members) {
     if (current.userId().equals(targetUserId)) {
       throw new ValidationException(List.of("You cannot remove yourself. Leave the Organization instead."));
     }
 
-    Optional<Member> target = database.findMember(organizationId, targetUserId);
+    Optional<Member> target = members.findByOrganizationIdAndUserId(organizationId, targetUserId);
     if (target.isEmpty()) {
       return;
     }
 
     if (target.get().role() == Role.OWNER && target.get().state() == MembershipState.ACTIVE
-        && database.findActiveOwners(organizationId).size() <= 1) {
+        && members.findAllByOrganizationId(organizationId, Role.OWNER, MembershipState.ACTIVE).size() <= 1) {
       throw new ValidationException(List.of("The last active Owner cannot be removed."));
     }
   }

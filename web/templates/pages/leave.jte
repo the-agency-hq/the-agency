@@ -1,10 +1,12 @@
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.MemberLeaveView
+@import org.lattejava.http.server.HTTPRequest
 
 @param MemberLeaveView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = "Leave " + model.organization().name(), content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = "Leave " + model.organization().name(), content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(

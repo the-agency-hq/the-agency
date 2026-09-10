@@ -4,7 +4,7 @@
  */
 
 /*
- * Fills the branch field with the selected repository's default branch, on the Organization connect page.
+ * Fills the branch field with the selected repository's default branch, on the repository picker.
  *
  * Convenience only, and deliberately so: the field stays a plain text input that can be typed into, and the server
  * validates whatever arrives. A page reached with JavaScript disabled still works -- it just asks the operator to

@@ -13,7 +13,7 @@ import module org.lattejava.jwt;
  * so {@code OIDC#user()} hands out a {@code User} rather than a raw {@code JWT} and no caller has to know which
  * claim carries what.
  *
- * <p>Static, and not registered on {@link Services}, because it holds nothing: every value it needs is in the token
+ * <p>Static, and not a bean, because it holds nothing: every value it needs is in the token
  * the caller presented. The same is true in {@code latte-java/app}, which this mirrors. Memberships are looked up
  * by the {@code userId} this produces.
  */

@@ -1,10 +1,12 @@
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.OrganizationsView
+@import org.lattejava.http.server.HTTPRequest
 
 @param OrganizationsView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = "Organizations", content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = "Organizations", content = @`
   @template.components.page-header(
       label = "Fleet",
       title = "Organizations",
@@ -13,18 +15,6 @@
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           New Organization
         </a>`)
-
-  <%-- OAuth outcomes that have no Organization page left to land on. Rendered from a fixed set of known values
-       rather than echoed, so nothing an attacker can put in the URL reaches the page. --%>
-  @if("state_mismatch".equals(model.status()))
-    <div class="mb-6 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-4 py-3" role="alert">
-      <p class="text-sm text-red-800 dark:text-red-300">That GitHub response did not match a connection started from this browser, so it was ignored.</p>
-    </div>
-  @elseif("link_failed".equals(model.status()))
-    <div class="mb-6 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-4 py-3" role="alert">
-      <p class="text-sm text-red-800 dark:text-red-300">GitHub authorized the connection, but the Organization it was for no longer exists — it may have been deleted while you were away authorizing.</p>
-    </div>
-  @endif
 
   <%-- The viewer's pending invitations, ahead of the listing itself: each is the same banner the Organization's
        own page shows, so accepting or declining works from either place. An invited Organization renders here and
@@ -57,7 +47,7 @@
         <thead class="bg-slate-50 dark:bg-navy-900">
         <tr class="text-left">
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Name</th>
-          <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Repository</th>
+          <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Source</th>
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Status</th>
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Latest version</th>
           <th scope="col" class="whitespace-nowrap px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">Last polled</th>
@@ -70,11 +60,19 @@
               <a class="font-medium text-accent-700 dark:text-accent-400 hover:underline" href="/app/organizations/${row.id().toString()}">${row.name()}</a>
             </td>
             <td class="px-4 py-3">
-              @if(row.repository().isEmpty())
-                <a class="text-xs font-semibold text-accent-700 dark:text-accent-400 hover:underline" href="/app/organizations/${row.id().toString()}/connect">Connect a repository</a>
+              @if(row.source() == null)
+                <%-- Only an Owner can reach the Sources page, so only an Owner is offered the link. --%>
+                @if(row.canManage())
+                  <a class="text-xs font-semibold text-accent-700 dark:text-accent-400 hover:underline" href="/app/organizations/${row.id().toString()}/sources">Connect a source</a>
+                @else
+                  <span class="text-xs text-slate-400 dark:text-slate-500">No source</span>
+                @endif
               @else
-                <code class="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">${row.repository()}</code>
-                <div class="text-xs text-slate-400 dark:text-slate-500">${row.branch()}</div>
+                <div class="text-xs text-slate-400 dark:text-slate-500">${row.sourceType().label()}</div>
+                <code class="font-mono text-xs text-slate-600 dark:text-slate-400 break-all">${row.source()}</code>
+                @if(row.branch() != null)
+                  <div class="text-xs text-slate-400 dark:text-slate-500">${row.branch()}</div>
+                @endif
               @endif
             </td>
             <td class="px-4 py-3">

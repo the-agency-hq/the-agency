@@ -5,11 +5,13 @@ package dev.theagencyhq.agency.db.jooq.tables.records;
 
 
 import dev.theagencyhq.agency.db.jooq.tables.BriefSources;
+import dev.theagencyhq.agency.model.BriefSourceType;
 import dev.theagencyhq.agency.model.SourceStatus;
 
 import java.time.Instant;
 import java.util.UUID;
 
+import org.jooq.JSONB;
 import org.jooq.Record1;
 import org.jooq.impl.UpdatableRecordImpl;
 
@@ -51,129 +53,129 @@ public class BriefSourcesRecord extends UpdatableRecordImpl<BriefSourcesRecord> 
     }
 
     /**
-     * Setter for <code>public.brief_sources.owner</code>.
-     */
-    public void setOwner(String value) {
-        set(2, value);
-    }
-
-    /**
-     * Getter for <code>public.brief_sources.owner</code>.
-     */
-    public String getOwner() {
-        return (String) get(2);
-    }
-
-    /**
-     * Setter for <code>public.brief_sources.repository</code>.
-     */
-    public void setRepository(String value) {
-        set(3, value);
-    }
-
-    /**
-     * Getter for <code>public.brief_sources.repository</code>.
-     */
-    public String getRepository() {
-        return (String) get(3);
-    }
-
-    /**
-     * Setter for <code>public.brief_sources.branch</code>.
-     */
-    public void setBranch(String value) {
-        set(4, value);
-    }
-
-    /**
-     * Getter for <code>public.brief_sources.branch</code>.
-     */
-    public String getBranch() {
-        return (String) get(4);
-    }
-
-    /**
      * Setter for <code>public.brief_sources.last_built_commit</code>.
      */
     public void setLastBuiltCommit(String value) {
-        set(5, value);
+        set(2, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_built_commit</code>.
      */
     public String getLastBuiltCommit() {
-        return (String) get(5);
+        return (String) get(2);
     }
 
     /**
      * Setter for <code>public.brief_sources.last_polled_instant</code>.
      */
     public void setLastPolledInstant(Instant value) {
-        set(6, value);
+        set(3, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_polled_instant</code>.
      */
     public Instant getLastPolledInstant() {
-        return (Instant) get(6);
+        return (Instant) get(3);
     }
 
     /**
      * Setter for <code>public.brief_sources.last_status</code>.
      */
     public void setLastStatus(SourceStatus value) {
-        set(7, value);
+        set(4, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_status</code>.
      */
     public SourceStatus getLastStatus() {
-        return (SourceStatus) get(7);
+        return (SourceStatus) get(4);
     }
 
     /**
      * Setter for <code>public.brief_sources.last_error</code>.
      */
     public void setLastError(String value) {
-        set(8, value);
+        set(5, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.last_error</code>.
      */
     public String getLastError() {
-        return (String) get(8);
+        return (String) get(5);
     }
 
     /**
      * Setter for <code>public.brief_sources.insert_instant</code>.
      */
     public void setInsertInstant(Instant value) {
-        set(9, value);
+        set(6, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.insert_instant</code>.
      */
     public Instant getInsertInstant() {
-        return (Instant) get(9);
+        return (Instant) get(6);
     }
 
     /**
      * Setter for <code>public.brief_sources.update_instant</code>.
      */
     public void setUpdateInstant(Instant value) {
-        set(10, value);
+        set(7, value);
     }
 
     /**
      * Getter for <code>public.brief_sources.update_instant</code>.
      */
     public Instant getUpdateInstant() {
-        return (Instant) get(10);
+        return (Instant) get(7);
+    }
+
+    /**
+     * Setter for <code>public.brief_sources.type</code>.
+     */
+    public void setType(BriefSourceType value) {
+        set(8, value);
+    }
+
+    /**
+     * Getter for <code>public.brief_sources.type</code>.
+     */
+    public BriefSourceType getType() {
+        return (BriefSourceType) get(8);
+    }
+
+    /**
+     * Setter for <code>public.brief_sources.source</code>.
+     */
+    public void setSource(String value) {
+        set(9, value);
+    }
+
+    /**
+     * Getter for <code>public.brief_sources.source</code>.
+     */
+    public String getSource() {
+        return (String) get(9);
+    }
+
+    /**
+     * Setter for <code>public.brief_sources.source_config</code>.
+     */
+    public void setSourceConfig(JSONB value) {
+        set(10, value);
+    }
+
+    /**
+     * Getter for <code>public.brief_sources.source_config</code>.
+     */
+    public JSONB getSourceConfig() {
+        return (JSONB) get(10);
     }
 
     // -------------------------------------------------------------------------
@@ -199,20 +201,20 @@ public class BriefSourcesRecord extends UpdatableRecordImpl<BriefSourcesRecord> 
     /**
      * Create a detached, initialised BriefSourcesRecord
      */
-    public BriefSourcesRecord(UUID id, UUID organizationId, String owner, String repository, String branch, String lastBuiltCommit, Instant lastPolledInstant, SourceStatus lastStatus, String lastError, Instant insertInstant, Instant updateInstant) {
+    public BriefSourcesRecord(UUID id, UUID organizationId, String lastBuiltCommit, Instant lastPolledInstant, SourceStatus lastStatus, String lastError, Instant insertInstant, Instant updateInstant, BriefSourceType type, String source, JSONB sourceConfig) {
         super(BriefSources.BRIEF_SOURCES);
 
         setId(id);
         setOrganizationId(organizationId);
-        setOwner(owner);
-        setRepository(repository);
-        setBranch(branch);
         setLastBuiltCommit(lastBuiltCommit);
         setLastPolledInstant(lastPolledInstant);
         setLastStatus(lastStatus);
         setLastError(lastError);
         setInsertInstant(insertInstant);
         setUpdateInstant(updateInstant);
+        setType(type);
+        setSource(source);
+        setSourceConfig(sourceConfig);
         resetTouchedOnNotNull();
     }
 }

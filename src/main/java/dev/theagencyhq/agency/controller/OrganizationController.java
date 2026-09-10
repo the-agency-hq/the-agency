@@ -5,6 +5,7 @@
 package dev.theagencyhq.agency.controller;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
@@ -12,14 +13,13 @@ import module org.lattejava.web;
 import dev.theagencyhq.agency.model.Member;
 
 /**
- * The admin UI: create an Organization, connect it to a GitHub repository, trigger a rebuild, and inspect exactly
- * what a Brief version contains.
+ * The admin UI for Organizations: create one, choose its Agents, see its Brief source and version history, trigger
+ * a rebuild, and inspect exactly what a Brief version contains.
  *
- * <p>Naming, connecting GitHub, and picking a repository are three steps on separate pages because each needs the
- * one before it: the Organization has to exist for the OAuth callback to have somewhere to return to, and the
- * repository picker is populated from GitHub with the Organization's own authorization. The Organization's view
- * page holds the sequence together — it warns when the GitHub connection is missing or dead, carries the button
- * that starts (or restarts) the authorization, and is where the callback lands.
+ * <p>The Sources page is here too — it lists every kind of source this server offers, warns when the connection is
+ * missing or dead, and is where the OAuth callbacks land — but the kinds' own routes belong to
+ * {@code RepositorySourceController}, which owns the handshakes and the repository picker. The Organization's own
+ * page warns when there is no connected source, and points an Owner at the Sources page.
  *
  * <p>Every route here sits behind the browser OIDC profile installed on the {@code /app} prefix, so an
  * unauthenticated visitor is redirected to the provider and never reaches a handler. Authorization is membership:
@@ -27,26 +27,30 @@ import dev.theagencyhq.agency.model.Member;
  * the path-bound Organization, and the management routes additionally require an ACTIVE OWNER — see {@code Main}'s
  * route table.
  */
+@Prototype
 public class OrganizationController {
-  private final DatabaseService database;
-  private final GitHubClient github;
-  private final GitHubLinkService links;
+  private final BriefRepository briefs;
+  private final SourceCatalog catalog;
+  private final MemberRepository members;
   private final OIDC<User> oidc;
+  private final OrganizationRepository organizations;
   private final OrganizationService organizationService;
   private final PollerService poller;
+  private final BriefSourceRepository sources;
   private final JTETemplates templates;
 
-  /**
-   * @param oidc      The browser OIDC profile, for the signed-in user.
-   * @param templates The template engine.
-   */
-  public OrganizationController(OIDC<User> oidc, JTETemplates templates) {
-    this.database = Services.databaseService();
-    this.github = Services.gitHubClient();
-    this.links = Services.gitHubLinkService();
+  public OrganizationController(BriefRepository briefs, SourceCatalog catalog, MemberRepository members,
+                                @Named(Wiring.SSR) OIDC<User> oidc, OrganizationRepository organizations,
+                                OrganizationService organizationService, PollerService poller,
+                                BriefSourceRepository sources, JTETemplates templates) {
+    this.briefs = briefs;
+    this.catalog = catalog;
+    this.members = members;
     this.oidc = oidc;
-    this.organizationService = Services.organizationService();
-    this.poller = Services.pollerService();
+    this.organizations = organizations;
+    this.organizationService = organizationService;
+    this.poller = poller;
+    this.sources = sources;
     this.templates = templates;
   }
 
@@ -82,83 +86,11 @@ public class OrganizationController {
         organization.agents() == null ? List.of() : organization.agents().enabled(), List.of()));
   }
 
-  /**
-   * The repository picker, reached from the Organization's page once its GitHub connection exists.
-   */
-  public void connect(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
-    // The picker cannot render without a working token to list repositories with, so an unconnected Organization
-    // is sent back to its own page -- which is where the connection is offered -- rather than shown a dead end.
-    var accessToken = links.accessToken(organization.id(), organization.gitHubConnection());
-    if (accessToken == null) {
-      res.sendRedirect("/app/organizations/" + organization.id(), 303);
-      return;
-    }
-
-    renderConnect(req, res, organization, accessToken, req.getParameter("status"), List.of(),
-        req.getParameter("repository"), req.getParameter("branch"));
-  }
-
-  /**
-   * Registers the repository the operator picked. Rejecting it re-renders the picker rather than redirecting, so
-   * the reason is shown next to the form that produced it.
-   */
-  public void connectSource(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
-    var fullName = req.getParameter("repository");
-    var branch = req.getParameter("branch");
-    var accessToken = links.accessToken(organization.id(), organization.gitHubConnection());
-    if (accessToken == null) {
-      // The authorization died between rendering the picker and submitting it. The Organization's page is where
-      // the (re)connect warning lives, so the submission lands there rather than on a picker that cannot work.
-      res.sendRedirect("/app/organizations/" + organization.id(), 303);
-      return;
-    }
-
-    // The form carries owner/name as one field because that is how GitHub names a repository everywhere the
-    // operator has seen it, including in the select this posts from.
-    var slash = fullName == null ? -1 : fullName.indexOf('/');
-    if (slash <= 0 || slash == fullName.length() - 1) {
-      renderConnect(req, res, organization, accessToken, null, List.of("A GitHub repository is required."),
-          fullName, branch);
-      return;
-    }
-
-    try {
-      organizationService.connect(organization.id(), accessToken, fullName.substring(0, slash),
-          fullName.substring(slash + 1), branch);
-    } catch (GitHubUnauthorizedException e) {
-      // The credential died between rendering the picker and validating the submission, and GitHub said so. It is
-      // removed for the same reason as in renderConnect: the Organization's page must offer the reconnect.
-      links.unlink(organization.id());
-      res.sendRedirect("/app/organizations/" + organization.id(), 303);
-      return;
-    } catch (ValidationException e) {
-      renderConnect(req, res, organization, accessToken, null, e.errors(), fullName, branch);
-      return;
-    }
-
-    // Straight to a build rather than waiting out an interval: an operator who has just connected a repository is
-    // watching for the first version, and a minute of an empty version list reads as a failure.
-    poller.nudge();
-    res.sendRedirect("/app/organizations/" + organization.id(), 303);
-  }
-
   public void create(HTTPRequest req, HTTPResponse res) throws IOException {
     var name = req.getParameter("name");
     try {
-      // Straight to the Organization's page, which owns everything that happens next: it warns that GitHub is not
-      // connected yet and carries the button that starts the authorization.
+      // Straight to the Organization's page, which warns that no source is connected yet and points the Owner at
+      // the Sources page, where the authorization is started.
       var organization = organizationService.create(name, oidc.user());
       res.sendRedirect("/app/organizations/" + organization.id(), 303);
     } catch (ValidationException e) {
@@ -173,12 +105,11 @@ public class OrganizationController {
       return;
     }
 
-    var source = database.findSource(organization.id()).orElse(null);
-    var versions = database.listBriefs(organization.id());
+    var source = sources.findByOrganizationId(organization.id()).orElse(null);
+    var versions = briefs.findAllByOrganizationId(organization.id());
     // Cached by OrganizationSecurity, which admits no request without one, so this is a read rather than a query.
     var membership = (Member) req.getAttribute(OrganizationSecurity.MEMBER_ATTRIBUTE);
-    render("pages/detail.jte", req, res,
-        new OrganizationDetailView(organization, source, versions, membership, req.getParameter("status")));
+    render("pages/detail.jte", req, res, new OrganizationDetailView(organization, source, versions, membership));
   }
 
   public void file(HTTPRequest req, HTTPResponse res) throws IOException {
@@ -195,7 +126,7 @@ public class OrganizationController {
       return;
     }
 
-    var brief = database.findBrief(organization.id(), version).orElse(null);
+    var brief = briefs.findByOrganizationIdAndVersion(organization.id(), version).orElse(null);
     if (brief == null) {
       Main.missing(req, res);
       return;
@@ -223,49 +154,84 @@ public class OrganizationController {
   }
 
   public void list(HTTPRequest req, HTTPResponse res) throws IOException {
-    var sourcesByOrganization = database.listSources()
-                                        .stream()
-                                        .collect(Collectors.toMap(BriefSource::organizationId, s -> s));
-    // Versions only, never latestBriefs(): this page renders one integer per Organization, and latestBriefs()
-    // carries every Brief's full document with it.
-    var latestVersions = database.latestBriefVersions();
+    var sourcesByOrganization = sources.findAll()
+                                       .stream()
+                                       .collect(Collectors.toMap(BriefSource::organizationId, s -> s));
+    // Versions only, never findLatest(): this page renders one integer per Organization, and findLatest() carries
+    // every Brief's full document with it.
+    var latestVersions = briefs.findLatestVersions();
 
     // The viewer's Organizations, not all of them: membership is what makes one visible here. PENDING rows are
     // deliberately included, because this listing is how an invited user finds the Organization to accept -- but
     // they render as invitations above the listing, with Accept and Decline, rather than as rows in it. An
     // Organization the viewer has not joined yet has no status worth a table row.
     var userId = oidc.user().userId();
-    var membershipsByOrganization = database.listMembersForUser(userId)
-                                            .stream()
-                                            .collect(Collectors.toMap(Member::organizationId, m -> m));
+    var membershipsByOrganization = members.findAllByUserId(userId)
+                                           .stream()
+                                           .collect(Collectors.toMap(Member::organizationId, m -> m));
 
     var invitations = new ArrayList<OrganizationsView.Invitation>();
     var rows = new ArrayList<OrganizationsView.Row>();
-    for (var o : database.listOrganizationsForUser(userId)) {
+    for (var o : organizations.findAllByMember(userId)) {
       var membership = membershipsByOrganization.get(o.id());
       if (membership.state() == MembershipState.PENDING) {
         invitations.add(new OrganizationsView.Invitation(o.id(), o.name(), membership.role()));
         continue;
       }
 
+      // A source that has been connected but not registered has nothing to show yet, so the row reads exactly as
+      // one with no source at all: it is the Sources page that tells the two apart.
       var source = sourcesByOrganization.get(o.id());
+      var registered = source != null && source.registered();
       rows.add(new OrganizationsView.Row(
           o.id(),
           o.name(),
-          source == null ? "" : source.fullName(),
-          source == null ? "" : source.branch(),
+          membership.role(),
+          registered ? source.type() : null,
+          registered ? source.source() : null,
+          registered ? source.config().branch() : null,
           source == null ? null : source.lastStatus(),
           source == null ? null : source.lastError(),
           latestVersions.get(o.id()),
           source == null ? null : source.lastPolledInstant()));
     }
 
-    render("pages/organizations.jte", req, res,
-        new OrganizationsView(req.getParameter("status"), invitations, rows));
+    render("pages/organizations.jte", req, res, new OrganizationsView(invitations, rows));
   }
 
   public void newForm(HTTPRequest req, HTTPResponse res) throws IOException {
     renderForm(req, res, List.of(), "");
+  }
+
+  public void rebuild(HTTPRequest req, HTTPResponse res) throws IOException {
+    var organization = findOrganization(req);
+    if (organization == null) {
+      Main.missing(req, res);
+      return;
+    }
+
+    // A nudge, not a build. Running the fetch and the build on the request thread would hold an HTTP worker for as
+    // long as the slowest repository download takes, and it is the only thing that would ever build an Organization
+    // off the poller thread -- which is what forced the per-Organization lock this class used to depend on. The
+    // cycle is where the result appears, so the detail page reports the source's status whenever the admin next
+    // loads it.
+    poller.nudge();
+    res.sendRedirect("/app/organizations/" + organization.id(), 303);
+  }
+
+  /**
+   * The Sources page: every kind of source this server offers, and the state of the one the Organization has. Where
+   * the OAuth callbacks land; the outcome they queued is the layout's to show.
+   */
+  public void sources(HTTPRequest req, HTTPResponse res) throws IOException {
+    var organization = findOrganization(req);
+    if (organization == null) {
+      Main.missing(req, res);
+      return;
+    }
+
+    var source = sources.findByOrganizationId(organization.id()).orElse(null);
+    render("pages/sources.jte", req, res, new OrganizationSourcesView(organization, source, catalog.available()));
   }
 
   /**
@@ -301,22 +267,6 @@ public class OrganizationController {
     }
   }
 
-  public void rebuild(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
-    // A nudge, not a build. Running the fetch and the build on the request thread would hold an HTTP worker for as
-    // long as the slowest repository download takes, and it is the only thing that would ever build an Organization
-    // off the poller thread -- which is what forced the per-Organization lock this class used to depend on. The
-    // cycle is where the result appears, so the detail page reports the source's status whenever the admin next
-    // loads it.
-    poller.nudge();
-    res.sendRedirect("/app/organizations/" + organization.id(), 303);
-  }
-
   public void version(HTTPRequest req, HTTPResponse res) throws IOException {
     var organization = findOrganization(req);
     if (organization == null) {
@@ -330,7 +280,7 @@ public class OrganizationController {
       return;
     }
 
-    var brief = database.findBrief(organization.id(), version).orElse(null);
+    var brief = briefs.findByOrganizationIdAndVersion(organization.id(), version).orElse(null);
     if (brief == null) {
       Main.missing(req, res);
       return;
@@ -364,7 +314,7 @@ public class OrganizationController {
       return null;
     }
 
-    return database.findOrganization(id).orElse(null);
+    return organizations.findById(id).orElse(null);
   }
 
   /**
@@ -382,66 +332,10 @@ public class OrganizationController {
     templates.html(template, req, res, Map.of("model", model, "viewer", oidc.user()));
   }
 
-  /**
-   * Renders the repository picker, asking GitHub for the repositories the Organization's credential can reach.
-   *
-   * <p>A GitHub failure while listing degrades to the Organization's page rather than to an error page: a picker
-   * with no list is a dead end, an outage on GitHub's side is not a reason to make the Organization unreachable,
-   * and if the failure was the credential dying, that page is where the (re)connect warning lives.
-   */
-  private void renderConnect(HTTPRequest req, HTTPResponse res, Organization organization, String accessToken,
-                             String status, List<String> errors, String selected, String branch) throws IOException {
-    var repositories = new ArrayList<String>();
-    var defaultBranches = new HashMap<String, String>();
-    try {
-      for (var repository : repositories(accessToken)) {
-        repositories.add(repository.fullName());
-        defaultBranches.put(repository.fullName(), repository.defaultBranch() == null ? "main" : repository.defaultBranch());
-      }
-    } catch (GitHubUnauthorizedException e) {
-      // GitHub refused the credential itself, which no retry fixes: it is removed here so the page this lands on
-      // stops reading the Organization as connected and shows the reconnect warning instead of this same picker.
-      links.unlink(organization.id());
-      res.sendRedirect("/app/organizations/" + organization.id(), 303);
-      return;
-    } catch (GitHubException e) {
-      res.sendRedirect("/app/organizations/" + organization.id(), 303);
-      return;
-    }
-
-    Collections.sort(repositories);
-    var source = database.findSource(organization.id()).orElse(null);
-    var view = new OrganizationConnectView(organization, source, repositories, defaultBranches, status, errors,
-        selected == null ? "" : selected, branch == null ? "" : branch);
-    render("pages/connect.jte", req, res, view);
-  }
-
   private void renderForm(HTTPRequest req, HTTPResponse res, List<String> errors, String name) throws IOException {
     res.setStatus(200);
     // Not render(): this page's parameters are two separate values rather than one view model, so its map is built
     // here. The viewer still has to be in it, for the same layout.
     templates.html("pages/new.jte", req, res, Map.of("errors", errors, "name", name, "viewer", oidc.user()));
-  }
-
-  /**
-   * Every repository the operator can offer, flattened across every installation of the Agency's GitHub App they
-   * can reach. Two levels rather than one because that is how a GitHub App grants access: the App is installed on
-   * an account, and each installation covers the repositories that account chose to give it.
-   */
-  private List<GitHubRepository> repositories(String accessToken) {
-    var installations = github.installations(accessToken);
-    if (installations == null) {
-      return List.of();
-    }
-
-    var all = new ArrayList<GitHubRepository>();
-    for (var installation : installations) {
-      var repositories = github.repositories(accessToken, installation.id());
-      if (repositories != null) {
-        all.addAll(repositories);
-      }
-    }
-
-    return all;
   }
 }

@@ -22,9 +22,9 @@ import static org.testng.Assert.*;
 public class BriefBuilderTest {
   // A fixed id and name: the Organization's identity is nested inside the Brief and so feeds the content
   // checksum, and the determinism tests below would compare against a moving target if it were generated. The
-  // builder strips everything else -- the connection and the instants -- before the Brief is checksummed.
+  // builder strips everything else -- the instants -- before the Brief is checksummed.
   private static final Organization ORG = new Organization(UUID.fromString("00000000-0000-4000-8000-000000000042"),
-      "fusionauth", null, null, Instant.ofEpochSecond(1_700_000_000L), Instant.ofEpochSecond(1_700_000_000L));
+      "fusionauth", null, Instant.ofEpochSecond(1_700_000_000L), Instant.ofEpochSecond(1_700_000_000L));
   private Map<String, byte[]> files;
   private Map<String, String> modes;
 
@@ -44,8 +44,8 @@ public class BriefBuilderTest {
     write("rules/a.md", "A");
     var everyAgent = build();
 
-    var narrowed = new Organization(ORG.id(), ORG.name(), new Agents(List.of(Agent.CLAUDE)), null,
-        ORG.insertInstant(), ORG.updateInstant());
+    var narrowed = new Organization(ORG.id(), ORG.name(), new Agents(List.of(Agent.CLAUDE)), ORG.insertInstant(),
+        ORG.updateInstant());
     var brief = new BriefBuilder().build(narrowed, new RepositoryContents("commit", files, modes));
     assertEquals(brief.organization().agents(), new Agents(List.of(Agent.CLAUDE)));
     assertEquals(brief.files(), everyAgent.files());

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-The Agency web application: it authors, versions, and distributes Briefs (from GitHub repositories) to Handlers.
+The Agency web application: it authors, versions, and distributes Briefs (from GitHub or GitLab repositories) to Handlers.
 Java 25 with JPMS modules, built with Latte (`project.latte`), running on the Latte Java stack
 (`org.lattejava:web`, `http`, `database`, `fusionauth`, `jwt`). PostgreSQL via jOOQ + HikariCP, JTE templates,
 Tailwind CSS, FusionAuth for all authentication.
@@ -32,14 +32,26 @@ Tailwind CSS, FusionAuth for all authentication.
   `docker compose down -v` first. The app **fails to start** if FusionAuth is down (it runs OIDC Discovery and
   fetches the JWKS during construction).
 - Config overrides live in `~/.config/the-agency-hq/the-agency/config.properties`. Required keys are listed in
-  `Main.REQUIRED_CONFIG`. `github.clientId`/`github.clientSecret` ship as `replace-me`; everything except the
-  GitHub connect flow works without a real GitHub App.
+  `Main.REQUIRED_CONFIG`. Brief source credentials (`github.clientId`/`github.clientSecret`, `gitlab.clientId`/
+  `gitlab.clientSecret`) are optional: a kind of source is offered only when its credentials are configured
+  (`SourceCatalog`), and with none configured the Sources page says so. Everything except connecting a source
+  works without them.
 
 ## Architecture
 
-**Wiring.** `Main` builds the two OIDC profiles, the JTE templates, and the route table, then calls
-`Services.initialize(config, gitHubClient)`. `Services` is a static singleton registry — every service is created
-there, in dependency order, and `Services.shutdown()` is idempotent because it runs from multiple shutdown paths.
+**Wiring.** Dependency injection is Avaje Inject (`io.avaje.inject`, annotation-processed at compile time; the
+generated `AgencyModule` is registered in `module-info.java`). Every controller, service, repository, and
+`OrganizationSecurity` is a `@Singleton` wired by its constructor; the two `OIDC<User>` profiles are `@Named`
+`ssr` and `api` (`Wiring.SSR`, `Wiring.API`). `Wiring` is the one `@Factory`: it derives the OIDC profiles,
+`Cookies`, `Database`, `DSLContext`, the real `GitHubClient` and `GitLabClient`, and the JTE templates from the `Configuration`.
+`Main` builds the `Configuration` (which files it layers is its decision), supplies it to the `BeanScope` along
+with a test's fake host clients if there are any, registers the scope as Web's `Injector`
+(`web.injector(injector::get)`), and builds the route table with `web.inject(Controller.class, Controller::method)`,
+which resolves the controller from the scope on every request. Building the scope is startup: migrations,
+FusionAuth discovery, the poller thread (`@PostConstruct`). Closing it is shutdown (`@PreDestroy` on the poller, the
+`Database` bean's destroy method), reached from both `Web`'s shutdown task and `Main.close()`, so `Main.shutdown` is
+idempotent. `Database` also keeps a static `instance()` for the application's database; a test may construct its
+own `new Database(config)` for a scratch database.
 
 **Two authentication boundaries, two FusionAuth Applications.** Routes under `/api` (the Briefing API, called by
 Handler daemons) validate JWTs against the Handler Application; routes under `/app` (the admin UI) use a browser
@@ -58,9 +70,20 @@ emails get the invitation email template, unknown ones get a FusionAuth registra
 the invitation — templates live in `src/main/fusionauth/kickstart/emails/`, and Mailcatcher (in the compose stack,
 http://localhost:1080) receives them locally.
 
-**Brief pipeline.** An Organization connects a GitHub repository through the admin UI (GitHub App OAuth; the
-credential is stored in columns on the `organizations` row). `PollerService` (a background thread, interval
-`poller.intervalSeconds`, disabled via `poller.enabled=false`) polls each source through `GitHubClient`,
+**Brief pipeline.** An Organization connects a Brief source from its Sources page (`/sources`, Owner-only), which
+lists one card per kind the server is configured for (`SourceCatalog.available()`). `brief_sources` holds one row
+per Organization: a `type` (`BriefSourceType`, which also carries the kind's URL slug), the identity that type is
+unique by in `source` (the repository as its host names it — `owner/repository` on GitHub, `group/project` on
+GitLab — case-insensitive via the `(type, LOWER(source))` index), and the whole configuration — credential
+included — as one JSONB document in `source_config`, a `BriefSourceConfig` sealed hierarchy discriminated by `type`
+(`GitHubConfig`, `GitLabConfig`; the interface itself exposes `connection()`, `fullName()`, `branch()` and the
+`with...` methods, so everything above the row is host-neutral). `RepositorySourceController` runs the OAuth
+handshake for every kind under `/app/oauth/{slug}/start|callback` (plus GitHub's install/setup pair); the callback
+creates the row connected and unregistered (`SourceLinkService.link`); the picker under `/sources/{slug}` registers
+the repository (`OrganizationService.connect` swaps the repository, resets the poll history, and keeps the
+credential). `PollerService` (a background thread, interval `poller.intervalSeconds`, disabled via
+`poller.enabled=false`) skips unregistered sources, reports sources of an unconfigured kind without touching their
+credential, and polls the host through the `RepositoryClient` the catalog resolves for the source's type.
 `BriefBuilder` hands the repository tree to every `Translator` in `service/translation/` and unions their files; a
 duplicate output path fails the build. `StandardTranslator` owns `.agents/` (skills, subagents, and the folded rules
 in `.agents/AGENTS.md` — never the root `AGENTS.md`, which is the team's own file); every other Translator owns one
@@ -81,16 +104,40 @@ latest Brief as a new version in one transaction with the row update, so Handler
 **Build gotcha.** `@JSON` is `SOURCE`-retained, and the compile is incremental: after editing a `@JSON` record that
 references another `@JSON` type, a stale `not @JSON-annotated` error means run `latte clean` first.
 
-**GitHub seam.** `GitHubClient` is an interface; `GitHubHTTPClient` is the real REST implementation. It is the
-app's only outbound dependency and the one thing tests fake — `FakeGitHubClient` is injected into `Main`'s
-constructor. Everything else in tests is real.
+**Host seam.** `RepositoryClient` (package `source`) is the one contract for everything the app asks a repository
+host: the two OAuth grants, the account, the repository listing, a ref's head, one file, and the whole tree at a
+commit. `GitHubClient` and `GitLabClient` are marker sub-interfaces so the scope holds one bean per host;
+`GitHubHTTPClient` and `GitLabHTTPClient` are the real implementations, and `SourceCatalog` maps a
+`BriefSourceType` to its client, decides which kinds are configured, builds the authorize URL, and creates a
+fresh source of a kind from configuration (`unregistered`). A source describes itself for the admin UI
+(`BriefSourceConfig.details()`/`url()`); the Organization's page renders those rows and assumes nothing about
+what a source is. The hosts are the app's only outbound dependencies and the one thing tests
+fake — `FakeRepositoryClient` (one instance per host) is injected into `Main`'s constructor; the shared
+`RepositoryConnectionTestBase` runs the whole handshake suite once per kind. Adding a source type is a
+`BriefSourceType` constant, a `BriefSourceConfig` subtype plus its `unregistered` branch, a migration widening
+`brief_sources_ck_type`, a marker interface and HTTP client, a `Wiring` bean and `Main` constructor parameter, the
+catalog's entries (configured keys, authorize URL, `unregistered`), a card description and icon in
+`sources.jte`/`source-icon.jte`, and a subclass of the connection test base.
 
 **Database.** SQL migrations in `src/main/resources/db` are applied by the app at startup (Latte Database
 `Migrator`). The jOOQ classes in `src/main/java/dev/theagencyhq/agency/db/jooq/` are generated — never hand-edit
-them; change a migration and run `latte codegen`.
+them; change a migration and run `latte codegen`. Data access is one repository per model in `db/` —
+`OrganizationRepository`, `BriefSourceRepository`, `BriefRepository` (insert-only: `create` assigns the version),
+and `MemberRepository` — each holding only core operations (`create`, `update`, `upsert`, `delete`, `findById`,
+`findBy...`, `findAll...`) over whole rows, all built on `Database.dsl()`. Business decisions live in the services,
+which read a row, change it through the model's `with...` methods, and write it back. Transactions belong to
+`Database` — jOOQ's `ThreadLocalTransactionProvider` binds one to the calling thread, so a service composes
+repository calls inside `Database.transaction`. The poller re-reads a source before recording a status so it never
+puts a stale credential back.
 
-**Frontend.** JTE templates in `web/templates`, view models in `model/view/`. Tailwind compiles
-`src/main/css/app.css` → `web/static/css/app.css` (a build artifact — don't edit the output).
+**Frontend.** JTE templates in `web/templates`, view models in `model/view/`; Web's base directory is `web`
+(`Main.BASE_DIR`), so static files are served from `web/static` and messages are read from `web/messages`. Latte's `FlashMessages` middleware is installed globally and the
+layout renders every queued `Flash` message as the admonition its type names (`info`, `success`, or `warning`), so a
+handler that redirects queues its notice with `new Flash(req).addMessage(type, message)` and the page it lands on shows
+it once. The text a handler queues comes from `web/messages` (Latte `Messages`: properties files mirroring the request
+path, so `web/messages/app/oauth/index.properties` serves every `/app/oauth/...` route); tests read the same files with
+`new Messages(Main.BASE_DIR, path)`. Tailwind compiles `src/main/css/app.css` → `web/static/css/app.css` (a build artifact — don't
+edit the output).
 
 **Modules.** The app and the tests are JPMS modules with their own `module-info.java`. Prefer `import module`
 over class imports. Test packages must be `opens ... to org.testng;` in the test module-info.

@@ -9,9 +9,13 @@ import module java.base;
 import module java.net.http;
 
 import dev.theagencyhq.agency.model.github.internal.*;
+import dev.theagencyhq.agency.model.internal.*;
+
+import java.lang.System.Logger.*;
 
 /**
- * The real {@link GitHubClient}, over {@code java.net.http}.
+ * The real {@link GitHubClient}, over {@code java.net.http}: two OAuth calls against {@code github.com}, and the
+ * reads against {@code api.github.com} made with a user-to-server token.
  *
  * <p>Every API call carries the {@code X-GitHub-Api-Version} header pinning the REST contract, so a future default
  * version on GitHub's side cannot change a response shape underneath a running Agency.
@@ -21,13 +25,6 @@ public class GitHubHTTPClient implements GitHubClient {
   public static final String API_VERSION = "2022-11-28";
   public static final String AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
   /**
-   * The ceiling on an unpacked repository, and the reason a Brief source may not be an ordinary application repository.
-   * A ZIP is decompressed into memory here, so without a limit a repository with a large asset — or a deliberately
-   * crafted one — is an out-of-memory failure that takes the whole Agency down rather than one Organization's build.
-   * Generous by two orders of magnitude for a tree of prose and configuration.
-   */
-  public static final long MAX_CONTENT_BYTES = 64L * 1024 * 1024;
-  /**
    * How many pages of installations or repositories to walk before giving up. GitHub pages at 100, so this covers an
    * operator with a thousand repositories and still terminates if a {@code Link} header ever lies.
    */
@@ -35,6 +32,7 @@ public class GitHubHTTPClient implements GitHubClient {
   public static final int PAGE_SIZE = 100;
   public static final String TOKEN_URL = "https://github.com/login/oauth/access_token";
   private static final Duration TIMEOUT = Duration.ofSeconds(30);
+  private static final System.Logger logger = System.getLogger(GitHubHTTPClient.class.getName());
   private final String clientId;
   private final String clientSecret;
   private final HttpClient httpClient;
@@ -60,9 +58,9 @@ public class GitHubHTTPClient implements GitHubClient {
    */
   public static String authorizeURL(String clientId, String redirectURI, String state) {
     return AUTHORIZE_URL
-        + "?client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8)
-        + "&redirect_uri=" + URLEncoder.encode(redirectURI, StandardCharsets.UTF_8)
-        + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
+        + "?client_id=" + encode(clientId)
+        + "&redirect_uri=" + encode(redirectURI)
+        + "&state=" + encode(state);
   }
 
   private static String encode(String segment) {
@@ -86,42 +84,50 @@ public class GitHubHTTPClient implements GitHubClient {
     return builder.toString();
   }
 
+  // The API addresses a repository as two path segments where everything above this client names it as one
+  // string. A GitHub owner cannot contain a slash, so the first one is the separator.
+  private static String repositoryPath(String fullName) {
+    var slash = fullName.indexOf('/');
+    return slash < 0 ? "/repos/" + encode(fullName) + "/"
+        : "/repos/" + encode(fullName.substring(0, slash)) + "/" + encode(fullName.substring(slash + 1));
+  }
+
   // 401 and only 401. GitHub answers 403 or 404 for a repository a perfectly good token simply cannot see -- and
   // 404 deliberately, so a private repository cannot be probed for existence -- which is a different problem with a
   // different fix, and is reported as an absence rather than as a rejected credential.
   private static void unauthorized(int status, String detail) {
     if (status == 401) {
-      throw new GitHubUnauthorizedException("GitHub rejected the access token for [" + detail + "]");
+      throw new RepositoryUnauthorizedException("GitHub rejected the access token for [" + detail + "]");
     }
   }
 
   @Override
-  public RepositoryContents contents(String accessToken, String owner, String repository, String commit) {
+  public RepositoryContents contents(String accessToken, String fullName, String commit) {
     // The tree first, and against the same commit SHA the zipball is fetched with, so the two halves of the
     // download describe one state of the repository even if somebody pushes between the two requests.
-    var tree = tree(accessToken, owner, repository, commit);
-    var zip = zipball(accessToken, owner, repository, commit);
-    return new RepositoryContents(commit, unzip(zip), tree);
+    var tree = tree(accessToken, fullName, commit);
+    var zip = zipball(accessToken, fullName, commit);
+    return new RepositoryContents(commit, Archives.unzip(zip, "GitHub"), tree);
   }
 
   @Override
-  public GitHubTokens exchangeCode(String code, String redirectURI) {
+  public OAuthTokens exchangeCode(String code, String redirectURI) {
     return token(form("client_id", clientId, "client_secret", clientSecret, "code", code, "redirect_uri", redirectURI));
   }
 
   @Override
-  public String head(String accessToken, String owner, String repository, String ref) {
+  public String head(String accessToken, String fullName, String ref) {
     // The `sha` media type makes the whole response body the commit SHA, rather than the full commit object with
     // its author, committer, message, tree, parents and stats -- none of which the poller reads.
-    var response = send(request(accessToken, "/repos/" + encode(owner) + "/" + encode(repository) + "/commits/"
-        + encode(ref)).header("Accept", "application/vnd.github.sha").GET().build(), HttpResponse.BodyHandlers.ofString());
-    unauthorized(response.statusCode(), owner + "/" + repository + "@" + ref);
+    var response = send(request(accessToken, repositoryPath(fullName) + "/commits/" + encode(ref))
+        .header("Accept", "application/vnd.github.sha").GET().build(), HttpResponse.BodyHandlers.ofString());
+    unauthorized(response.statusCode(), fullName + "@" + ref);
     if (response.statusCode() == 403 || response.statusCode() == 404) {
       return null;
     }
     if (response.statusCode() / 100 != 2) {
-      throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] resolving ["
-          + owner + "/" + repository + "@" + ref + "]: [" + response.body() + "]");
+      throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] resolving ["
+          + fullName + "@" + ref + "]: [" + response.body() + "]");
     }
 
     var sha = response.body().trim();
@@ -129,14 +135,69 @@ public class GitHubHTTPClient implements GitHubClient {
   }
 
   @Override
-  public List<GitHubInstallation> installations(String accessToken) {
+  public String login(String accessToken) {
+    var response = send(request(accessToken, "/user").GET().build(), HttpResponse.BodyHandlers.ofString());
+    if (response.statusCode() == 401) {
+      return null;
+    }
+    if (response.statusCode() / 100 != 2) {
+      throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] reading the current user: ["
+          + response.body() + "]");
+    }
+
+    return parse(response.body(), GitHubUserJSON::fromJSON, "/user").login();
+  }
+
+  @Override
+  public byte[] readFile(String accessToken, String fullName, String ref, String path) {
+    // The `raw` media type returns the file's bytes rather than a JSON object with base64 in it, which keeps this
+    // honest for a binary file and saves a decode for a text one.
+    var response = send(request(accessToken, repositoryPath(fullName) + "/contents/" + encodePath(path) + "?ref="
+            + encode(ref)).header("Accept", "application/vnd.github.raw").GET().build(),
+        HttpResponse.BodyHandlers.ofByteArray());
+    unauthorized(response.statusCode(), fullName + "@" + ref);
+    if (response.statusCode() == 403 || response.statusCode() == 404) {
+      return null;
+    }
+    if (response.statusCode() / 100 != 2) {
+      throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] reading [" + path + "] in ["
+          + fullName + "@" + ref + "]");
+    }
+
+    return response.body();
+  }
+
+  @Override
+  public OAuthTokens refresh(String refreshToken) {
+    return token(form("client_id", clientId, "client_secret", clientSecret, "grant_type", "refresh_token",
+        "refresh_token", refreshToken));
+  }
+
+  /**
+   * Every repository the operator can offer, flattened across every installation of the Agency's GitHub App they
+   * can reach. Two levels rather than one because that is how a GitHub App grants access: the App is installed on
+   * an account, and each installation covers the repositories that account chose to give it.
+   */
+  @Override
+  public List<RepositorySummary> repositories(String accessToken) {
+    var all = new ArrayList<RepositorySummary>();
+    for (var installation : installations(accessToken)) {
+      for (var repository : repositories(accessToken, installation.id())) {
+        all.add(new RepositorySummary(repository.fullName(), repository.defaultBranch()));
+      }
+    }
+
+    return all;
+  }
+
+  private List<GitHubInstallation> installations(String accessToken) {
     var all = new ArrayList<GitHubInstallation>();
     for (var page = 1; page <= MAX_PAGES; page++) {
       var response = send(request(accessToken, "/user/installations?per_page=" + PAGE_SIZE + "&page=" + page).GET().build(),
           HttpResponse.BodyHandlers.ofString());
       unauthorized(response.statusCode(), "the current user");
       if (response.statusCode() / 100 != 2) {
-        throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] listing installations: ["
+        throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] listing installations: ["
             + response.body() + "]");
       }
 
@@ -154,41 +215,23 @@ public class GitHubHTTPClient implements GitHubClient {
     return all;
   }
 
-  @Override
-  public byte[] readFile(String accessToken, String owner, String repository, String ref, String path) {
-    // The `raw` media type returns the file's bytes rather than a JSON object with base64 in it, which keeps this
-    // honest for a binary file and saves a decode for a text one.
-    var response = send(request(accessToken, "/repos/" + encode(owner) + "/" + encode(repository) + "/contents/"
-            + encodePath(path) + "?ref=" + encode(ref)).header("Accept", "application/vnd.github.raw").GET().build(),
-        HttpResponse.BodyHandlers.ofByteArray());
-    unauthorized(response.statusCode(), owner + "/" + repository + "@" + ref);
-    if (response.statusCode() == 403 || response.statusCode() == 404) {
-      return null;
+  private <T> T parse(String body, Function<String, T> parser, String operation) {
+    try {
+      return parser.apply(body);
+    } catch (RuntimeException e) {
+      throw new RepositoryException("Unable to parse the GitHub response for [" + operation + "]", e);
     }
-    if (response.statusCode() / 100 != 2) {
-      throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] reading [" + path + "] in ["
-          + owner + "/" + repository + "@" + ref + "]");
-    }
-
-    return response.body();
   }
 
-  @Override
-  public GitHubTokens refresh(String refreshToken) {
-    return token(form("client_id", clientId, "client_secret", clientSecret, "grant_type", "refresh_token",
-        "refresh_token", refreshToken));
-  }
-
-  @Override
-  public List<GitHubRepository> repositories(String accessToken, long installationId) {
+  private List<GitHubRepository> repositories(String accessToken, long installationId) {
     var all = new ArrayList<GitHubRepository>();
     for (var page = 1; page <= MAX_PAGES; page++) {
       var response = send(request(accessToken, "/user/installations/" + installationId + "/repositories?per_page="
           + PAGE_SIZE + "&page=" + page).GET().build(), HttpResponse.BodyHandlers.ofString());
       unauthorized(response.statusCode(), "installation [" + installationId + "]");
       if (response.statusCode() / 100 != 2) {
-        throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] listing the repositories of "
-            + "installation [" + installationId + "]: [" + response.body() + "]");
+        throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] listing the repositories "
+            + "of installation [" + installationId + "]: [" + response.body() + "]");
       }
 
       var body = parse(response.body(), RepositoriesResponseJSON::fromJSON, "/user/installations/{id}/repositories");
@@ -205,29 +248,6 @@ public class GitHubHTTPClient implements GitHubClient {
     return all;
   }
 
-  @Override
-  public GitHubUser user(String accessToken) {
-    var response = send(request(accessToken, "/user").GET().build(), HttpResponse.BodyHandlers.ofString());
-    if (response.statusCode() == 401) {
-      return null;
-    }
-    if (response.statusCode() / 100 != 2) {
-      throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] reading the current user: ["
-          + response.body() + "]");
-    }
-
-    var user = parse(response.body(), GitHubUserJSON::fromJSON, "/user");
-    return user.login() == null ? null : user;
-  }
-
-  private <T> T parse(String body, Function<String, T> parser, String operation) {
-    try {
-      return parser.apply(body);
-    } catch (RuntimeException e) {
-      throw new GitHubException("Unable to parse the GitHub response for [" + operation + "]", e);
-    }
-  }
-
   private HttpRequest.Builder request(String accessToken, String path) {
     return HttpRequest.newBuilder(URI.create(API_URL + path))
                       .timeout(TIMEOUT)
@@ -240,16 +260,16 @@ public class GitHubHTTPClient implements GitHubClient {
     try {
       return httpClient.send(request, handler);
     } catch (IOException e) {
-      throw new GitHubException("Unable to call GitHub [" + request.method() + " " + request.uri() + "]", e);
+      throw new RepositoryException("Unable to call GitHub [" + request.method() + " " + request.uri() + "]", e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new GitHubException("Interrupted calling GitHub [" + request.method() + " " + request.uri() + "]", e);
+      throw new RepositoryException("Interrupted calling GitHub [" + request.method() + " " + request.uri() + "]", e);
     }
   }
 
   // Both OAuth grants have the same shape: a form POST that answers 200 whether it succeeded or failed, and says
   // which in the body. Nothing here may branch on the status code.
-  private GitHubTokens token(String body) {
+  private OAuthTokens token(String body) {
     var request = HttpRequest.newBuilder(URI.create(TOKEN_URL))
                              .timeout(TIMEOUT)
                              .header("Accept", "application/json")
@@ -258,28 +278,34 @@ public class GitHubHTTPClient implements GitHubClient {
                              .build();
     var response = send(request, HttpResponse.BodyHandlers.ofString());
     if (response.statusCode() / 100 != 2) {
-      throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] from the token endpoint");
+      throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] from the token endpoint");
+    }
+
+    var parsed = parse(response.body(), OAuthTokenResponseJSON::fromJSON, "the token endpoint");
+    if (parsed.error() != null) {
+      // GitHub answers 200 for a rejected grant (an already-used code, a revoked refresh token) and names the reason.
+      logger.log(Level.WARNING, "GitHub rejected the grant: [{0}] [{1}]", parsed.error(), parsed.errorDescription());
     }
 
     // Instant.now() is read after the response arrives rather than before the request, so a slow round trip
     // shortens the recorded lifetime instead of overstating it.
-    return GitHubTokens.from(parse(response.body(), TokenResponseJSON::fromJSON, "the token endpoint"), Instant.now());
+    return OAuthTokens.from(parsed, Instant.now());
   }
 
-  private Map<String, String> tree(String accessToken, String owner, String repository, String commit) {
-    var response = send(request(accessToken, "/repos/" + encode(owner) + "/" + encode(repository) + "/git/trees/"
-        + encode(commit) + "?recursive=1").GET().build(), HttpResponse.BodyHandlers.ofString());
-    unauthorized(response.statusCode(), owner + "/" + repository + "@" + commit);
+  private Map<String, String> tree(String accessToken, String fullName, String commit) {
+    var response = send(request(accessToken, repositoryPath(fullName) + "/git/trees/" + encode(commit)
+        + "?recursive=1").GET().build(), HttpResponse.BodyHandlers.ofString());
+    unauthorized(response.statusCode(), fullName + "@" + commit);
     if (response.statusCode() / 100 != 2) {
-      throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] reading the tree of ["
-          + owner + "/" + repository + "@" + commit + "]: [" + response.body() + "]");
+      throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] reading the tree of ["
+          + fullName + "@" + commit + "]: [" + response.body() + "]");
     }
 
     var body = parse(response.body(), TreeResponseJSON::fromJSON, "/repos/{owner}/{repo}/git/trees/{sha}");
     if (body.truncated()) {
-      throw new GitHubException("The tree of [" + owner + "/" + repository + "@" + commit + "] is too large for "
-          + "GitHub to return in full, so the file modes cannot be read. A Brief source repository must be small "
-          + "enough to list in one request");
+      throw new RepositoryException("The tree of [" + fullName + "@" + commit + "] is too large for GitHub to "
+          + "return in full, so the file modes cannot be read. A Brief source repository must be small enough to "
+          + "list in one request");
     }
 
     var modes = new HashMap<String, String>();
@@ -292,70 +318,29 @@ public class GitHubHTTPClient implements GitHubClient {
     return modes;
   }
 
-  // GitHub names every entry `<owner>-<repo>-<abbreviated sha>/...`, so the first segment is stripped. Directory
-  // entries and anything that escapes the archive root are dropped rather than rejected: the ZIP is GitHub's own
-  // output, so a traversal entry means something upstream is wrong and the honest response is to not have the file.
-  private Map<String, byte[]> unzip(byte[] archive) {
-    var files = new HashMap<String, byte[]>();
-    var total = 0L;
-    try (var zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
-      for (var entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
-        if (entry.isDirectory()) {
-          continue;
-        }
-
-        var name = entry.getName();
-        var slash = name.indexOf('/');
-        if (slash < 0) {
-          continue;
-        }
-
-        var path = name.substring(slash + 1);
-        if (path.isEmpty() || path.startsWith("/") || path.equals("..") || path.startsWith("../")
-            || path.contains("/../") || path.endsWith("/..")) {
-          continue;
-        }
-
-        var bytes = zip.readAllBytes();
-        total += bytes.length;
-        if (total > MAX_CONTENT_BYTES) {
-          throw new GitHubException("The repository archive expands to more than [" + MAX_CONTENT_BYTES
-              + "] bytes, which is larger than a Brief source repository may be");
-        }
-
-        files.put(path, bytes);
-      }
-    } catch (IOException e) {
-      throw new GitHubException("Unable to read the repository archive GitHub returned", e);
-    }
-
-    return files;
-  }
-
-  private byte[] zipball(String accessToken, String owner, String repository, String commit) {
-    var response = send(request(accessToken, "/repos/" + encode(owner) + "/" + encode(repository) + "/zipball/"
-        + encode(commit)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+  private byte[] zipball(String accessToken, String fullName, String commit) {
+    var response = send(request(accessToken, repositoryPath(fullName) + "/zipball/" + encode(commit)).GET().build(),
+        HttpResponse.BodyHandlers.ofByteArray());
 
     // GitHub answers this one with a 302 to a signed codeload URL. Followed by hand and with no Authorization
     // header, because the JDK's own redirect handling would carry the header to a different host.
     if (response.statusCode() == 301 || response.statusCode() == 302 || response.statusCode() == 307) {
       var location = response.headers().firstValue("Location").orElse(null);
       if (location == null) {
-        throw new GitHubException("GitHub redirected the archive of [" + owner + "/" + repository + "] with no "
-            + "[Location] header");
+        throw new RepositoryException("GitHub redirected the archive of [" + fullName + "] with no [Location] header");
       }
 
       response = send(HttpRequest.newBuilder(URI.create(location)).timeout(TIMEOUT).GET().build(),
           HttpResponse.BodyHandlers.ofByteArray());
     }
 
-    unauthorized(response.statusCode(), owner + "/" + repository + "@" + commit);
+    unauthorized(response.statusCode(), fullName + "@" + commit);
     if (response.statusCode() / 100 != 2) {
-      throw new GitHubException("GitHub returned HTTP [" + response.statusCode() + "] downloading the archive of ["
-          + owner + "/" + repository + "@" + commit + "]");
+      throw new RepositoryException("GitHub returned HTTP [" + response.statusCode() + "] downloading the archive of ["
+          + fullName + "@" + commit + "]");
     }
-    if (response.body().length > MAX_CONTENT_BYTES) {
-      throw new GitHubException("The archive of [" + owner + "/" + repository + "@" + commit + "] is ["
+    if (response.body().length > Archives.MAX_CONTENT_BYTES) {
+      throw new RepositoryException("The archive of [" + fullName + "@" + commit + "] is ["
           + response.body().length + "] bytes, which is larger than a Brief source repository may be");
     }
 

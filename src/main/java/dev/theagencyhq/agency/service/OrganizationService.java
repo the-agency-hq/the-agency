@@ -5,47 +5,76 @@
 package dev.theagencyhq.agency.service;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 
 import dev.theagencyhq.agency.model.Member;
 
 /**
- * Creates and deletes Organizations, and connects one to the GitHub repository its Briefs are built from.
+ * Creates and deletes Organizations, and registers the repository an Organization's Briefs are built from.
  *
  * <p>Creating and connecting are two calls because they are two steps for the operator: an Organization is named
  * first and exists from that moment, with no source, and is pointed at a repository afterwards — which cannot
- * happen until a GitHub authorization exists to list repositories with. An Organization with no source is therefore
- * an ordinary state rather than a broken one; the poller has nothing to poll for it and the admin UI says so.
+ * happen until an authorization with the host exists to list repositories with, and that authorization is what
+ * creates the source row. An Organization with no source, or with a source that is connected and not yet registered, is
+ * therefore an ordinary state rather than a broken one; the poller has nothing to poll for it and the admin UI says
+ * so.
  */
+@Prototype
 public class OrganizationService {
-  private final DatabaseService database;
-  private final GitHubClient github;
+  private final BriefRepository briefs;
+  private final SourceCatalog catalog;
+  private final Database database;
+  private final MemberRepository members;
+  private final OrganizationRepository organizations;
+  private final BriefSourceRepository sourceRepository;
 
-  public OrganizationService(DatabaseService database, GitHubClient github) {
+  public OrganizationService(Database database, BriefRepository briefs, BriefSourceRepository sourceRepository,
+                             MemberRepository members, OrganizationRepository organizations, SourceCatalog catalog) {
+    this.briefs = briefs;
+    this.catalog = catalog;
     this.database = database;
-    this.github = github;
+    this.members = members;
+    this.organizations = organizations;
+    this.sourceRepository = sourceRepository;
   }
 
   /**
-   * Points an Organization at a GitHub repository, replacing whatever source it had.
+   * Points an Organization's source at a repository, replacing whatever repository it polled before and keeping the
+   * authorization that polls it.
    *
+   * <p>The poll history is deliberately not carried over. {@code lastBuiltCommit} in particular belongs to whatever
+   * repository was registered before, and preserving it across a change of repository would make the next cycle
+   * compare the new repository's head against the old one's and, if they happened to agree, skip the build that
+   * was the entire point of reconnecting.
+   *
+   * @param type           The kind of source the picker was rendered for.
    * @param organizationId The Organization to connect.
-   * @param accessToken    The Organization's GitHub token, used to verify the repository before it is registered.
-   * @param owner          The repository owner.
-   * @param repository     The repository name.
+   * @param accessToken    The Organization's token for the host, used to verify the repository before it is
+   *                       registered.
+   * @param fullName       The repository as the host names it.
    * @param branch         The branch to build from.
-   * @return The registered source.
-   * @throws dev.theagencyhq.agency.error.ValidationException if the repository is not a usable Brief source.
+   * @return The registered source, or {@code null} if the Organization no longer has a source of that kind to
+   *     register it on — its authorization was removed, or replaced by another kind's, between the caller resolving
+   *     a token and this call.
+   * @throws dev.theagencyhq.agency.error.ValidationException if the repository is not a usable Brief source, or is
+   *     already registered to another Organization.
    */
-  public BriefSource connect(UUID organizationId, String accessToken, String owner, String repository,
+  public BriefSource connect(BriefSourceType type, UUID organizationId, String accessToken, String fullName,
                              String branch) {
-    SourceValidator.validate(organizationId, owner, repository, branch, accessToken, database, github);
+    SourceValidator.validate(type, organizationId, fullName, branch, accessToken, sourceRepository,
+        catalog.client(type));
+
+    var existing = sourceRepository.findByOrganizationId(organizationId).orElse(null);
+    if (existing == null || existing.type() != type) {
+      return null;
+    }
 
     var now = Instant.now();
-    var source = new BriefSource(UUID.randomUUID(), organizationId, owner, repository, branch, null, null, null,
-        null, now, now);
-    database.replaceSource(source);
-    return source;
+    var registered = new BriefSource(existing.id(), organizationId,
+        existing.config().withRepository(fullName.trim(), branch), null, null, null, null, existing.insertInstant(),
+        now);
+    return sourceRepository.update(registered) ? registered : null;
   }
 
   /**
@@ -59,18 +88,22 @@ public class OrganizationService {
    * @throws dev.theagencyhq.agency.error.ValidationException if the name is missing, too long, or taken.
    */
   public Organization create(String name, User creator) {
-    OrganizationValidator.validate(name, database);
+    OrganizationValidator.validate(name, organizations);
 
     var now = Instant.now();
-    var organization = new Organization(UUID.randomUUID(), name, null, null, now, now);
-    database.insertOrganization(organization);
-    database.insertMember(
-        new Member(organization.id(), creator.userId(), Role.OWNER, MembershipState.ACTIVE, null, null, now));
+    var organization = new Organization(UUID.randomUUID(), name, null, now, now);
+    // One transaction: an Organization without its first Owner is one nobody can administer, so the two rows land
+    // together or not at all.
+    database.transaction(() -> {
+      organizations.create(organization);
+      members.create(
+          new Member(organization.id(), creator.userId(), Role.OWNER, MembershipState.ACTIVE, null, null, now));
+    });
     return organization;
   }
 
   public void delete(UUID organizationId) {
-    database.deleteOrganization(organizationId);
+    organizations.delete(organizationId);
   }
 
   /**
@@ -93,8 +126,8 @@ public class OrganizationService {
     // The Agents record canonicalizes (sorts, deduplicates) at construction, so both sides compare as selections
     // rather than as orderings.
     var now = Instant.now();
-    var updated = new Organization(organization.id(), organization.name(), agents, organization.gitHubConnection(),
-        organization.insertInstant(), now);
+    var updated = new Organization(organization.id(), organization.name(), agents, organization.insertInstant(),
+        now);
     if (Objects.equals(updated.agents(), organization.agents())) {
       return false;
     }
@@ -102,13 +135,20 @@ public class OrganizationService {
     // The republished document is built exactly as BriefBuilder builds one -- identity and selection only, then
     // checksummed -- so the next poll, which builds the same files under the same selection, computes the same
     // checksum and records UNCHANGED rather than publishing a duplicate.
-    var republished = database.findLatestBrief(organization.id()).map(latest -> {
+    var republished = briefs.findLatestByOrganizationId(organization.id()).map(latest -> {
       var content = new Brief(null, new Organization(organization.id(), organization.name(), updated.agents(), null,
-          null, null), null, latest.files(), null, null);
+          null), null, latest.files(), null, null);
       return new Brief(BriefBuilder.checksum(content), content.organization(), null, content.files(),
           latest.sourceCommit(), now);
     }).orElse(null);
-    database.updateAgents(organization.id(), updated.agents(), now, republished);
+
+    // One transaction, so the row can never say one thing while the latest version says another.
+    database.transaction(() -> {
+      organizations.update(updated);
+      if (republished != null) {
+        briefs.create(republished);
+      }
+    });
     return true;
   }
 }

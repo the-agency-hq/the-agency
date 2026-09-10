@@ -15,7 +15,7 @@ import static org.testng.Assert.*;
 @Test
 public class WireContractTest {
   private static final Organization ORGANIZATION = new Organization(
-      UUID.fromString("00000000-0000-4000-8000-000000000042"), "fusionauth", null, null,
+      UUID.fromString("00000000-0000-4000-8000-000000000042"), "fusionauth", null,
       Instant.ofEpochSecond(1_700_000_000L), Instant.ofEpochSecond(1_700_000_000L));
 
   @Test
@@ -110,9 +110,9 @@ public class WireContractTest {
         List.of(" Web ", "library", "WEB", "", "Library"));
     assertEquals(authored.missionTypes(), List.of("library", "web"));
 
-    var fresh = new Organization(UUID.fromString("00000000-0000-4000-8000-000000000042"), "FusionAuth", null, null,
+    var fresh = new Organization(UUID.fromString("00000000-0000-4000-8000-000000000042"), "FusionAuth", null,
         Instant.ofEpochSecond(1_700_000_000L, 123_456_789), Instant.ofEpochSecond(1_700_000_000L, 987_654_321));
-    var roundTripped = new Organization(fresh.id(), fresh.name(), null, null,
+    var roundTripped = new Organization(fresh.id(), fresh.name(), null,
         Instant.ofEpochMilli(fresh.insertInstant().toEpochMilli()),
         Instant.ofEpochMilli(fresh.updateInstant().toEpochMilli()));
 
@@ -131,7 +131,7 @@ public class WireContractTest {
   @Test
   public void agentsRideOnTheOrganizationOnlyWhenNarrowed() {
     var narrowed = new Organization(ORGANIZATION.id(), ORGANIZATION.name(),
-        new Agents(List.of(Agent.CURSOR, Agent.CLAUDE, Agent.CURSOR)), null, null, null);
+        new Agents(List.of(Agent.CURSOR, Agent.CLAUDE, Agent.CURSOR)), null, null);
     assertEquals(narrowed.agents().enabled(), List.of(Agent.CLAUDE, Agent.CURSOR));
 
     var json = new Brief(null, narrowed, null, List.of(), null, null).toJSON();

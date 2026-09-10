@@ -51,115 +51,45 @@ public class OrganizationsRecord extends UpdatableRecordImpl<OrganizationsRecord
     }
 
     /**
-     * Setter for <code>public.organizations.github_login</code>.
-     */
-    public void setGithubLogin(String value) {
-        set(2, value);
-    }
-
-    /**
-     * Getter for <code>public.organizations.github_login</code>.
-     */
-    public String getGithubLogin() {
-        return (String) get(2);
-    }
-
-    /**
-     * Setter for <code>public.organizations.github_access_token</code>.
-     */
-    public void setGithubAccessToken(String value) {
-        set(3, value);
-    }
-
-    /**
-     * Getter for <code>public.organizations.github_access_token</code>.
-     */
-    public String getGithubAccessToken() {
-        return (String) get(3);
-    }
-
-    /**
-     * Setter for <code>public.organizations.github_access_expiration</code>.
-     */
-    public void setGithubAccessExpiration(Instant value) {
-        set(4, value);
-    }
-
-    /**
-     * Getter for <code>public.organizations.github_access_expiration</code>.
-     */
-    public Instant getGithubAccessExpiration() {
-        return (Instant) get(4);
-    }
-
-    /**
-     * Setter for <code>public.organizations.github_refresh_token</code>.
-     */
-    public void setGithubRefreshToken(String value) {
-        set(5, value);
-    }
-
-    /**
-     * Getter for <code>public.organizations.github_refresh_token</code>.
-     */
-    public String getGithubRefreshToken() {
-        return (String) get(5);
-    }
-
-    /**
-     * Setter for <code>public.organizations.github_refresh_expiration</code>.
-     */
-    public void setGithubRefreshExpiration(Instant value) {
-        set(6, value);
-    }
-
-    /**
-     * Getter for <code>public.organizations.github_refresh_expiration</code>.
-     */
-    public Instant getGithubRefreshExpiration() {
-        return (Instant) get(6);
-    }
-
-    /**
      * Setter for <code>public.organizations.insert_instant</code>.
      */
     public void setInsertInstant(Instant value) {
-        set(7, value);
+        set(2, value);
     }
 
     /**
      * Getter for <code>public.organizations.insert_instant</code>.
      */
     public Instant getInsertInstant() {
-        return (Instant) get(7);
+        return (Instant) get(2);
     }
 
     /**
      * Setter for <code>public.organizations.update_instant</code>.
      */
     public void setUpdateInstant(Instant value) {
-        set(8, value);
+        set(3, value);
     }
 
     /**
      * Getter for <code>public.organizations.update_instant</code>.
      */
     public Instant getUpdateInstant() {
-        return (Instant) get(8);
+        return (Instant) get(3);
     }
 
     /**
      * Setter for <code>public.organizations.agents</code>.
      */
     public void setAgents(JSONB value) {
-        set(9, value);
+        set(4, value);
     }
 
     /**
      * Getter for <code>public.organizations.agents</code>.
      */
     public JSONB getAgents() {
-        return (JSONB) get(9);
+        return (JSONB) get(4);
     }
 
     // -------------------------------------------------------------------------
@@ -185,16 +115,11 @@ public class OrganizationsRecord extends UpdatableRecordImpl<OrganizationsRecord
     /**
      * Create a detached, initialised OrganizationsRecord
      */
-    public OrganizationsRecord(UUID id, String name, String githubLogin, String githubAccessToken, Instant githubAccessExpiration, String githubRefreshToken, Instant githubRefreshExpiration, Instant insertInstant, Instant updateInstant, JSONB agents) {
+    public OrganizationsRecord(UUID id, String name, Instant insertInstant, Instant updateInstant, JSONB agents) {
         super(Organizations.ORGANIZATIONS);
 
         setId(id);
         setName(name);
-        setGithubLogin(githubLogin);
-        setGithubAccessToken(githubAccessToken);
-        setGithubAccessExpiration(githubAccessExpiration);
-        setGithubRefreshToken(githubRefreshToken);
-        setGithubRefreshExpiration(githubRefreshExpiration);
         setInsertInstant(insertInstant);
         setUpdateInstant(updateInstant);
         setAgents(agents);

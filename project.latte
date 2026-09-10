@@ -1,4 +1,4 @@
-project(group: "dev.theagencyhq", name: "the-agency", version: "0.1.3", licenses: ["MIT"]) {
+project(group: "dev.theagencyhq", name: "the-agency", version: "0.3.0", licenses: ["MIT"]) {
   workflow {
     standard()
 
@@ -15,6 +15,7 @@ project(group: "dev.theagencyhq", name: "the-agency", version: "0.1.3", licenses
 
   dependencies {
     group(name: "compile-processors") {
+      dependency(id: "io.avaje:avaje-inject-generator:12.6")
       dependency(id: "org.lattejava:json:0.4.3")
     }
     group(name: "compile") {
@@ -24,13 +25,17 @@ project(group: "dev.theagencyhq", name: "the-agency", version: "0.1.3", licenses
       // jOOQ's module-info `requires static` r2dbc-spi and reactive-streams, so javac needs them on the
       // compile module-path. They are optional in jOOQ's POM and so are not resolved transitively.
       dependency(id: "io.r2dbc:r2dbc-spi:1.0.0.RELEASE")
+      dependency(id: "io.avaje:avaje-applog:1.2")
+      dependency(id: "io.avaje:avaje-inject:12.6")
+      dependency(id: "jakarta.inject:jakarta.inject-api:2.0.1")
+      dependency(id: "org.jspecify:jspecify:1.0.0")
       dependency(id: "org.jooq:jooq:3.21.4")
       dependency(id: "org.lattejava:database:0.1.0")
       dependency(id: "org.lattejava:fusionauth:0.4.0")
       dependency(id: "org.lattejava:http:0.3.0")
       dependency(id: "org.lattejava:jwt:0.2.0")
       dependency(id: "org.lattejava:version:0.6.2")
-      dependency(id: "org.lattejava:web:0.7.0")
+      dependency(id: "org.lattejava:web:0.11.0")
       dependency(id: "org.postgresql:postgresql:42.7.11")
       dependency(id: "org.reactivestreams:reactive-streams:1.0.4")
     }

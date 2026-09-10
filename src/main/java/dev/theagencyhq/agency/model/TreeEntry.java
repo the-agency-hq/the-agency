@@ -2,17 +2,19 @@
  * Copyright (c) 2026 The Agency HQ
  * SPDX-License-Identifier: MIT
  */
-package dev.theagencyhq.agency.model.github;
+package dev.theagencyhq.agency.model;
 
 import module org.lattejava.json;
 
 /**
- * One entry in a recursive Git tree, from {@code GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1}.
+ * One entry in a recursive Git tree, as both GitHub ({@code GET /repos/{owner}/{repo}/git/trees/{sha}?recursive=1})
+ * and GitLab ({@code GET /projects/{id}/repository/tree?recursive=true}) report one. The two agree on these three
+ * member names, so one record reads both.
  *
- * <p>This exists for one member: {@code mode}. The zipball the Agency downloads the content from carries Unix
+ * <p>This exists for one member: {@code mode}. The archive the Agency downloads the content from carries Unix
  * permissions in each entry's external attributes, and {@code java.util.zip} exposes no way to read them, so the
  * executable bit — which the Brief must carry, because the Handler writes these files out with it — has to come
- * from somewhere else. The tree is that somewhere, and it costs exactly one extra request per build.
+ * from somewhere else. The tree is that somewhere.
  *
  * @param path The repository-relative path, with {@code /} separators and no leading slash.
  * @param mode The Git file mode: {@code 100644} regular, {@code 100755} executable, {@code 040000} directory,

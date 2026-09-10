@@ -50,4 +50,22 @@ public record Member(
   public UUID userId() {
     return user.userId();
   }
+
+  /**
+   * @param role The new role.
+   * @return This member with that role and nothing else changed.
+   */
+  public Member withRole(Role role) {
+    return new Member(organizationId, user, role, state, invitedBy, invitedAt, joinedAt);
+  }
+
+  /**
+   * @param state    The new state.
+   * @param joinedAt When the member joined — set alongside the state because the only transition is PENDING to
+   *                 ACTIVE, and the moment of acceptance is exactly when that timestamp exists.
+   * @return This member in that state and nothing else changed.
+   */
+  public Member withState(MembershipState state, Instant joinedAt) {
+    return new Member(organizationId, user, role, state, invitedBy, invitedAt, joinedAt);
+  }
 }

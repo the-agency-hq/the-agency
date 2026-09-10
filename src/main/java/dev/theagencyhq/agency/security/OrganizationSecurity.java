@@ -5,6 +5,7 @@
 package dev.theagencyhq.agency.security;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
@@ -29,6 +30,8 @@ import module org.lattejava.web;
  * {@code /app/organizations} prefix. The {@code organizationId} attribute is bound by route matching before prefix
  * middleware runs, so the lookup here is reliable.
  */
+// A singleton, unlike the controllers: a middleware is installed on the route table once, at startup.
+@Singleton
 public class OrganizationSecurity implements Middleware {
   /**
    * Request attribute under which the signed-in user's {@link Member} row for the path-bound Organization is
@@ -42,12 +45,15 @@ public class OrganizationSecurity implements Middleware {
    */
   public static final String ORGANIZATION_ATTRIBUTE = "organizationSecurity.organization";
   private static final String ORGANIZATION_ID_ATTRIBUTE = "organizationId";
-  private final DatabaseService database;
+  private final MemberRepository members;
   private final OIDC<User> oidc;
+  private final OrganizationRepository organizations;
 
-  public OrganizationSecurity(OIDC<User> oidc) {
-    this.database = Services.databaseService();
+  public OrganizationSecurity(MemberRepository members, @Named(Wiring.SSR) OIDC<User> oidc,
+                              OrganizationRepository organizations) {
+    this.members = members;
     this.oidc = oidc;
+    this.organizations = organizations;
   }
 
   @Override
@@ -66,13 +72,13 @@ public class OrganizationSecurity implements Middleware {
       return;
     }
 
-    var organization = database.findOrganization(organizationId).orElse(null);
+    var organization = organizations.findById(organizationId).orElse(null);
     if (organization == null) {
       res.sendRedirect("/app/organizations/", 303);
       return;
     }
 
-    var member = database.findMember(organizationId, oidc.user().userId()).orElse(null);
+    var member = members.findByOrganizationIdAndUserId(organizationId, oidc.user().userId()).orElse(null);
     if (member == null) {
       res.sendRedirect("/app/organizations/", 303);
       return;

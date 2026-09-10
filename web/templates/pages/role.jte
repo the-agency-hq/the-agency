@@ -1,11 +1,13 @@
 @import dev.theagencyhq.agency.model.Role
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.MemberRoleView
+@import org.lattejava.http.server.HTTPRequest
 
 @param MemberRoleView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = "Change role", content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = "Change role", content = @`
   !{String organizationId = model.organization().id().toString();}
   !{String memberName = model.member().user().email() != null ? model.member().user().email() : model.member().userId().toString();}
 

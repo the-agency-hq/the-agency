@@ -15,7 +15,7 @@ module dev.theagencyhq.agency.tests {
   requires org.testng;
 
   opens dev.theagencyhq.agency.tests to org.testng;
-  opens dev.theagencyhq.agency.tests.github to org.testng;
   opens dev.theagencyhq.agency.tests.service to org.testng;
   opens dev.theagencyhq.agency.tests.service.translation to org.testng;
+  opens dev.theagencyhq.agency.tests.source to org.testng;
 }

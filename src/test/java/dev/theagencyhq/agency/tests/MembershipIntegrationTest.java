@@ -31,8 +31,8 @@ public class MembershipIntegrationTest extends BaseTest {
 
   /**
    * An ACTIVE Contributor can work — the detail page and rebuild — but every management surface is Owner-only and
-   * answers with the silent redirect: the members pages, the picker, and the OAuth start that would swap the
-   * Organization's GitHub credential.
+   * answers with the silent redirect: the members pages, the Sources page and the picker under it, and the OAuth
+   * start that would swap the Organization's GitHub credential.
    */
   @Test
   public void aContributorCanWorkButCannotManage() throws Exception {
@@ -43,14 +43,15 @@ public class MembershipIntegrationTest extends BaseTest {
     test.get("/app/organizations/" + organization.id())
         .assertStatus(200)
         // The management actions are not offered to a Contributor, and Leave is.
-        .assertBodyAs(string, b -> b.doesNotContain("/members/\"").doesNotContain("/connect\"")
+        .assertBodyAs(string, b -> b.doesNotContain("/members/\"").doesNotContain("/sources\"")
                                     .contains("/members/leave"));
 
     test.post("/app/organizations/" + organization.id() + "/rebuild")
         .assertRedirect(303, "/app/organizations/" + organization.id());
 
     for (var path : List.of(
-        "/app/organizations/" + organization.id() + "/connect",
+        "/app/organizations/" + organization.id() + "/sources",
+        "/app/organizations/" + organization.id() + "/sources/github",
         "/app/organizations/" + organization.id() + "/members/",
         "/app/organizations/" + organization.id() + "/members/invite",
         "/app/organizations/" + organization.id() + "/members/" + testUser.userId() + "/role",
@@ -72,7 +73,8 @@ public class MembershipIntegrationTest extends BaseTest {
     ssrOIDC.login(ORDINARY_EMAIL, TEST_PASSWORD);
     for (var path : List.of(
         "/app/organizations/" + organization.id(),
-        "/app/organizations/" + organization.id() + "/connect",
+        "/app/organizations/" + organization.id() + "/sources",
+        "/app/organizations/" + organization.id() + "/sources/github",
         "/app/organizations/" + organization.id() + "/versions/1",
         "/app/organizations/" + organization.id() + "/members/",
         "/app/organizations/" + organization.id() + "/members/invite")) {
@@ -110,7 +112,7 @@ public class MembershipIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("not a valid format").contains("value=\"not-an-email\""))
         .reset(ResetItem.Request);
 
-    assertEquals(db.listMembers(organizationId).size(), 1);
+    assertEquals(members.findAllByOrganizationId(organizationId).size(), 1);
   }
 
   /**
@@ -125,14 +127,14 @@ public class MembershipIntegrationTest extends BaseTest {
     ssrOIDC.login(TEST_EMAIL, TEST_PASSWORD);
     test.post("/app/organizations/" + organization.id() + "/members/" + ordinaryUser.userId() + "/remove")
         .assertRedirect(303, "/app/organizations/" + organization.id() + "/members/");
-    assertTrue(db.findMember(organization.id(), ordinaryUser.userId()).isEmpty());
+    assertTrue(members.findByOrganizationIdAndUserId(organization.id(), ordinaryUser.userId()).isEmpty());
 
     // The invitee, still holding the page with the Accept button on it.
     ssrOIDC.logout();
     ssrOIDC.login(ORDINARY_EMAIL, TEST_PASSWORD);
     test.post("/app/organizations/" + organization.id() + "/members/accept")
         .assertRedirect(303, "/app/organizations/");
-    assertTrue(db.findMember(organization.id(), ordinaryUser.userId()).isEmpty());
+    assertTrue(members.findByOrganizationIdAndUserId(organization.id(), ordinaryUser.userId()).isEmpty());
   }
 
   /**
@@ -154,13 +156,13 @@ public class MembershipIntegrationTest extends BaseTest {
         .post("/app/organizations/" + organization.id() + "/members/" + ordinaryUser.userId() + "/role")
         .assertRedirect(303, "/app/organizations/" + organization.id() + "/members/")
         .reset(ResetItem.Request);
-    assertEquals(db.findMember(organization.id(), ordinaryUser.userId()).orElseThrow().role(), Role.OWNER);
+    assertEquals(members.findByOrganizationIdAndUserId(organization.id(), ordinaryUser.userId()).orElseThrow().role(), Role.OWNER);
 
     test.withFormField("role", "CONTRIBUTOR")
         .post("/app/organizations/" + organization.id() + "/members/" + ordinaryUser.userId() + "/role")
         .assertRedirect(303, "/app/organizations/" + organization.id() + "/members/")
         .reset(ResetItem.Request);
-    assertEquals(db.findMember(organization.id(), ordinaryUser.userId()).orElseThrow().role(), Role.CONTRIBUTOR);
+    assertEquals(members.findByOrganizationIdAndUserId(organization.id(), ordinaryUser.userId()).orElseThrow().role(), Role.CONTRIBUTOR);
   }
 
   /**
@@ -186,7 +188,7 @@ public class MembershipIntegrationTest extends BaseTest {
         .reset(ResetItem.Request);
 
     // The row is keyed to the existing FusionAuth user and records who invited them.
-    var invited = db.findMember(organizationId, ordinaryUser.userId()).orElseThrow();
+    var invited = members.findByOrganizationIdAndUserId(organizationId, ordinaryUser.userId()).orElseThrow();
     assertEquals(invited.state(), MembershipState.PENDING);
     assertEquals(invited.role(), Role.CONTRIBUTOR);
     assertEquals(invited.invitedBy(), testUser.userId());
@@ -202,7 +204,7 @@ public class MembershipIntegrationTest extends BaseTest {
     // does not require finding the Organization's page first.
     ssrOIDC.logout();
     ssrOIDC.login(ORDINARY_EMAIL, TEST_PASSWORD);
-    var organization = db.findOrganization(organizationId).orElseThrow();
+    var organization = organizations.findById(organizationId).orElseThrow();
     test.get("/app/organizations/")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains(organization.name())
@@ -217,7 +219,7 @@ public class MembershipIntegrationTest extends BaseTest {
     test.post("/app/organizations/" + organizationId + "/members/accept")
         .assertRedirect(303, "/app/organizations/" + organizationId);
 
-    var member = db.findMember(organizationId, ordinaryUser.userId()).orElseThrow();
+    var member = members.findByOrganizationIdAndUserId(organizationId, ordinaryUser.userId()).orElseThrow();
     assertEquals(member.state(), MembershipState.ACTIVE);
     assertNotNull(member.joinedAt());
 
@@ -228,7 +230,7 @@ public class MembershipIntegrationTest extends BaseTest {
     // A second accept is a no-op: joinedAt does not move.
     test.post("/app/organizations/" + organizationId + "/members/accept")
         .assertRedirect(303, "/app/organizations/" + organizationId);
-    assertEquals(db.findMember(organizationId, ordinaryUser.userId()).orElseThrow().joinedAt(), member.joinedAt());
+    assertEquals(members.findByOrganizationIdAndUserId(organizationId, ordinaryUser.userId()).orElseThrow().joinedAt(), member.joinedAt());
   }
 
   @Test
@@ -244,7 +246,7 @@ public class MembershipIntegrationTest extends BaseTest {
     test.post("/app/organizations/" + organization.id() + "/members/" + ordinaryUser.userId() + "/remove")
         .assertRedirect(303, "/app/organizations/" + organization.id() + "/members/");
 
-    assertTrue(db.findMember(organization.id(), ordinaryUser.userId()).isEmpty());
+    assertTrue(members.findByOrganizationIdAndUserId(organization.id(), ordinaryUser.userId()).isEmpty());
 
     // A page for a member that does not exist is a 404 -- the target is genuinely missing, not forbidden.
     test.get("/app/organizations/" + organization.id() + "/members/" + ordinaryUser.userId() + "/remove")
@@ -266,7 +268,7 @@ public class MembershipIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("your own role"))
         .reset(ResetItem.Request);
 
-    assertEquals(db.findMember(organization.id(), testUser.userId()).orElseThrow().role(), Role.OWNER);
+    assertEquals(members.findByOrganizationIdAndUserId(organization.id(), testUser.userId()).orElseThrow().role(), Role.OWNER);
   }
 
   /**
@@ -281,14 +283,14 @@ public class MembershipIntegrationTest extends BaseTest {
     ssrOIDC.login(ORDINARY_EMAIL, TEST_PASSWORD);
     test.post("/app/organizations/" + organization.id() + "/members/decline")
         .assertRedirect(303, "/app/organizations/");
-    assertTrue(db.findMember(organization.id(), ordinaryUser.userId()).isEmpty());
+    assertTrue(members.findByOrganizationIdAndUserId(organization.id(), ordinaryUser.userId()).isEmpty());
 
     ssrOIDC.logout();
     ssrOIDC.login(TEST_EMAIL, TEST_PASSWORD);
     test.post("/app/organizations/" + organization.id() + "/members/decline")
         .assertRedirect(303, "/app/organizations/");
 
-    var owner = db.findMember(organization.id(), testUser.userId()).orElseThrow();
+    var owner = members.findByOrganizationIdAndUserId(organization.id(), testUser.userId()).orElseThrow();
     assertEquals(owner.role(), Role.OWNER);
     assertEquals(owner.state(), MembershipState.ACTIVE);
   }
@@ -308,7 +310,7 @@ public class MembershipIntegrationTest extends BaseTest {
         .assertRedirect(303, "/app/organizations/" + organizationId + "/members/")
         .reset(ResetItem.Request);
 
-    assertTrue(db.findMember(organizationId, ordinaryUser.userId()).isPresent());
+    assertTrue(members.findByOrganizationIdAndUserId(organizationId, ordinaryUser.userId()).isPresent());
   }
 
   /**
@@ -331,7 +333,7 @@ public class MembershipIntegrationTest extends BaseTest {
     var created = fusionAuth.retrieveUser(null, null, null, null, email, null);
     assertNotNull(created, "The invite did not register a FusionAuth user for [" + email + "]");
     try {
-      var member = db.findMember(organizationId, created.user().id()).orElseThrow();
+      var member = members.findByOrganizationIdAndUserId(organizationId, created.user().id()).orElseThrow();
       assertEquals(member.state(), MembershipState.PENDING);
       assertEquals(member.role(), Role.CONTRIBUTOR);
       assertEquals(member.invitedBy(), testUser.userId());
@@ -358,7 +360,7 @@ public class MembershipIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("already a member or has a pending invitation"))
         .reset(ResetItem.Request);
 
-    assertEquals(db.listMembers(organization.id()).size(), 2);
+    assertEquals(members.findAllByOrganizationId(organization.id()).size(), 2);
   }
 
   /**
@@ -378,12 +380,12 @@ public class MembershipIntegrationTest extends BaseTest {
     test.post("/app/organizations/" + organization.id() + "/members/leave")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("last active Owner"));
-    assertTrue(db.findMember(organization.id(), testUser.userId()).isPresent());
+    assertTrue(members.findByOrganizationIdAndUserId(organization.id(), testUser.userId()).isPresent());
 
     insertMember(organization, ordinaryUser, Role.OWNER, MembershipState.ACTIVE);
     test.post("/app/organizations/" + organization.id() + "/members/leave")
         .assertRedirect(303, "/app/organizations/");
-    assertTrue(db.findMember(organization.id(), testUser.userId()).isEmpty());
+    assertTrue(members.findByOrganizationIdAndUserId(organization.id(), testUser.userId()).isEmpty());
   }
 
   /**
@@ -399,7 +401,7 @@ public class MembershipIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("cannot remove yourself"));
 
-    assertTrue(db.findMember(organization.id(), testUser.userId()).isPresent());
+    assertTrue(members.findByOrganizationIdAndUserId(organization.id(), testUser.userId()).isPresent());
   }
 
   /**
@@ -427,8 +429,8 @@ public class MembershipIntegrationTest extends BaseTest {
             // The joined Organization is a table row, not a banner: no Accept for it.
             .contains(joined.name())
             .doesNotContain("/app/organizations/" + joined.id() + "/members/accept")
-            // And the invited one is not a row: an unconnected row's repository cell would carry this link.
-            .doesNotContain("/app/organizations/" + invited.id() + "/connect"));
+            // And the invited one is not a row: an unconnected row's source cell would carry this link.
+            .doesNotContain("/app/organizations/" + invited.id() + "/sources"));
   }
 
   /**

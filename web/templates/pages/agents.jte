@@ -1,11 +1,13 @@
 @import dev.theagencyhq.agency.model.Agent
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.OrganizationAgentsView
+@import org.lattejava.http.server.HTTPRequest
 
 @param OrganizationAgentsView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = "Agents", content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = "Agents", content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(

@@ -2,7 +2,7 @@
  * Copyright (c) 2026 The Agency HQ
  * SPDX-License-Identifier: MIT
  */
-package dev.theagencyhq.agency.model.github;
+package dev.theagencyhq.agency.model;
 
 import module java.base;
 
@@ -17,7 +17,7 @@ import module java.base;
  * failure path, and a build whose outcome depends on the umask, the case-sensitivity, and the free space of whatever
  * machine the Agency happens to be running on.
  *
- * <p>A submodule contributes no blob at all — GitHub leaves gitlinks out of the archive — so one never appears in
+ * <p>A submodule contributes no blob at all — the hosts leave gitlinks out of the archive — so one never appears in
  * {@link #files}. A symbolic link does appear, as a small file whose content is the path it points at, which is why
  * {@link #symlink} exists for the build to reject one with.
  * <p>

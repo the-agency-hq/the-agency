@@ -5,6 +5,7 @@
 package dev.theagencyhq.agency.controller;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
@@ -20,12 +21,13 @@ import dev.theagencyhq.agency.model.api.internal.*;
  * already answered with a {@code 401} and never got here. {@link OIDC#user()} therefore always resolves, and the
  * {@link User} it returns is the developer whose Handler is polling.
  */
+@Prototype
 public class BriefingController {
   private static final System.Logger logger = System.getLogger(BriefingController.class.getName());
   private final BriefingService briefingService;
   private final OIDC<User> oidc;
 
-  public BriefingController(OIDC<User> oidc, BriefingService briefingService) {
+  public BriefingController(@Named(Wiring.API) OIDC<User> oidc, BriefingService briefingService) {
     this.briefingService = briefingService;
     this.oidc = oidc;
   }
@@ -58,7 +60,7 @@ public class BriefingController {
 
   /**
    * Serializes the envelope through the generated codec. The Briefs are real {@code Brief} objects by the time they
-   * reach here — {@code DatabaseService} parses each stored document on the way out — so there is no JSON text to
+   * reach here — {@code BriefRepository} parses each stored document on the way out — so there is no JSON text to
    * splice and nothing here writes JSON by hand.
    */
   private void write(HTTPResponse res, BriefingOutcome.Updated updated, User user) throws IOException {

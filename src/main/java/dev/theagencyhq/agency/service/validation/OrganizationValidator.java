@@ -22,7 +22,7 @@ public final class OrganizationValidator {
   private OrganizationValidator() {
   }
 
-  public static void validate(String name, DatabaseService database) {
+  public static void validate(String name, OrganizationRepository organizations) {
     var errors = new ArrayList<String>();
 
     // Trimmed but not lowercased: the stored name keeps the author's case, and the uniqueness check below is
@@ -33,7 +33,7 @@ public final class OrganizationValidator {
     } else if (trimmedName.length() > NAME_MAX_LENGTH) {
       errors.add("The name must be at most " + NAME_MAX_LENGTH + " characters, but was [" + trimmedName.length()
                  + "].");
-    } else if (database.findOrganizationByName(trimmedName).isPresent()) {
+    } else if (organizations.findByName(trimmedName).isPresent()) {
       errors.add("The name [" + trimmedName + "] is already registered.");
     }
 

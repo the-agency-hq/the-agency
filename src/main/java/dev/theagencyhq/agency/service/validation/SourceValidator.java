@@ -8,8 +8,7 @@ import module dev.theagencyhq.agency;
 import module java.base;
 
 /**
- * Validates the GitHub repository an operator picked for an Organization, before it is registered as its Brief
- * source.
+ * Validates the repository an operator picked for an Organization, before it is registered as its Brief source.
  *
  * <p>The settings marker is fetched and PARSED here, not merely looked for, and that is the whole reason this class
  * runs at registration time at all. Without it, a repository the Agency cannot build registers cleanly and then
@@ -18,46 +17,47 @@ import module java.base;
  * subset of it — is what guarantees registration can never accept a repository the very next build is certain to
  * reject.
  *
- * <p>It costs two GitHub requests: one to resolve the branch, one to read a file that is a few dozen bytes. That is
- * the cheapest possible way to answer the question, and answering it late is what makes it expensive.
+ * <p>It costs two requests to the host: one to resolve the branch, one to read a file that is a few dozen bytes.
+ * That is the cheapest possible way to answer the question, and answering it late is what makes it expensive.
  */
 public final class SourceValidator {
   private SourceValidator() {
   }
 
   /**
+   * @param type           The kind of source the repository is being registered as.
    * @param organizationId The Organization the repository is being registered to. Its own current source does not
    *                       count against the one-repository-per-Organization rule, so picking the repository it
    *                       already holds — to change the branch, or to change nothing — is not a collision.
-   * @param owner          The repository owner, as the form supplied it.
-   * @param repository     The repository name, as the form supplied it.
+   * @param fullName       The repository as the host names it, as the form supplied it.
    * @param branch         The branch to build from, as the form supplied it.
-   * @param accessToken    The connecting user's GitHub token.
-   * @param database       The database, for the uniqueness check.
-   * @param github         The GitHub client.
-   * @throws GitHubUnauthorizedException If GitHub rejected the token — the connection's problem rather than the
-   *     repository's, so it is the caller's to handle, not a validation error.
+   * @param accessToken    The Organization's token for the host.
+   * @param sources        The sources, for the uniqueness check.
+   * @param client         The host's client.
+   * @throws RepositoryUnauthorizedException If the host rejected the token — the connection's problem rather than
+   *     the repository's, so it is the caller's to handle, not a validation error.
    * @throws ValidationException with every reason this repository cannot be registered.
    */
-  public static void validate(UUID organizationId, String owner, String repository, String branch,
-                              String accessToken, DatabaseService database, GitHubClient github) {
+  public static void validate(BriefSourceType type, UUID organizationId, String fullName, String branch,
+                              String accessToken, BriefSourceRepository sources, RepositoryClient client) {
     var errors = new ArrayList<String>();
-    var trimmedOwner = owner == null ? "" : owner.trim();
-    var trimmedRepository = repository == null ? "" : repository.trim();
+    var trimmedName = fullName == null ? "" : fullName.trim();
     var trimmedBranch = branch == null ? "" : branch.trim();
 
-    if (trimmedOwner.isEmpty() || trimmedRepository.isEmpty()) {
-      errors.add("A GitHub repository is required.");
+    // The form carries the repository as the host names it, which on both hosts is a path with at least one
+    // slash and something on either side of it: `owner/repository`, `group/project`.
+    var slash = trimmedName.indexOf('/');
+    if (slash <= 0 || slash == trimmedName.length() - 1) {
+      errors.add("A " + type.label() + " repository is required.");
     }
     if (trimmedBranch.isEmpty()) {
       errors.add("A branch is required.");
     }
 
-    // Only when the fields are present at all: everything below asks GitHub about them, and asking about an empty
-    // string produces a second, less useful error for a mistake already reported.
+    // Only when the fields are present at all: everything below asks the host about them, and asking about an
+    // empty string produces a second, less useful error for a mistake already reported.
     if (errors.isEmpty()) {
-      var error = repositoryError(organizationId, trimmedOwner, trimmedRepository, trimmedBranch, accessToken,
-          database, github);
+      var error = repositoryError(type, organizationId, trimmedName, trimmedBranch, accessToken, sources, client);
       if (error != null) {
         errors.add(error);
       }
@@ -73,31 +73,31 @@ public final class SourceValidator {
    *     because the later checks presuppose the earlier ones — asking for a file on a branch that does not exist, or
    *     parsing a settings file the repository does not have, produces noise rather than a second useful error.
    */
-  private static String repositoryError(UUID organizationId, String owner, String repository, String branch,
-                                        String accessToken, DatabaseService database, GitHubClient github) {
-    var fullName = owner + "/" + repository;
-    var registered = database.findSourceByRepository(owner, repository).orElse(null);
+  private static String repositoryError(BriefSourceType type, UUID organizationId, String fullName, String branch,
+                                        String accessToken, BriefSourceRepository sources, RepositoryClient client) {
+    var registered = sources.findBySource(type, fullName).orElse(null);
     if (registered != null && !registered.organizationId().equals(organizationId)) {
       return "The repository [" + fullName + "] is already registered to another Organization.";
     }
 
+    var label = type.label();
     byte[] settings;
     try {
-      if (github.head(accessToken, owner, repository, branch) == null) {
-        return "GitHub has no branch [" + branch + "] in [" + fullName + "], or the repository is not one this "
-            + "GitHub account has given The Agency access to.";
+      if (client.head(accessToken, fullName, branch) == null) {
+        return label + " has no branch [" + branch + "] in [" + fullName + "], or the repository is not one this "
+            + label + " account has given The Agency access to.";
       }
 
-      settings = github.readFile(accessToken, owner, repository, branch, BriefBuilder.SETTINGS_FILE);
-    } catch (GitHubUnauthorizedException e) {
+      settings = client.readFile(accessToken, fullName, branch, BriefBuilder.SETTINGS_FILE);
+    } catch (RepositoryUnauthorizedException e) {
       // Deliberately not turned into a validation error: "retry" is the wrong instruction for a dead credential,
-      // and the caller owns the connection and what happens to a credential GitHub has refused.
+      // and the caller owns the connection and what happens to a credential the host has refused.
       throw e;
-    } catch (GitHubException e) {
+    } catch (RepositoryException e) {
       // A transport failure or an unexpected status. Reported as a validation error rather than a 500 because the
       // operator can act on it -- retrying is the whole of the fix -- and because a stack trace on a form is not an
       // improvement over a sentence.
-      return "GitHub could not be reached to check [" + fullName + "]: " + e.getMessage();
+      return label + " could not be reached to check [" + fullName + "]: " + e.getMessage();
     }
 
     try {

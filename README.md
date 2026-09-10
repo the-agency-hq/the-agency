@@ -39,12 +39,14 @@ This project uses the Latte Web framework and HTTP server. You can learn more ab
 ## Concepts
 
 * Brief - the collection of rules, commands, skills, and other files used by Agents (LLMs)
-* Organization - contains a single connected GitHub repository that is the source of the Brief
+* Organization - has a single Brief source, a connected GitHub repository or GitLab project, that its Brief is built from
 * Member - a user that is part of an Organization
 
-## Briefs from GitHub
+## Brief sources
 
-Users connect a GitHub repository to an Organization. This app polls GitHub for changes to the repository. Any changes that occur are downloaded and translated into a Brief. This is stored in the database and versioned.
+Users connect a repository on a host — GitHub or GitLab — to an Organization. This app polls the host for changes to the repository. Any changes that occur are downloaded and translated into a Brief. This is stored in the database and versioned.
+
+A kind of source is offered on an Organization's **Sources** page only when the server holds its OAuth credentials (`github.clientId`/`github.clientSecret` for GitHub, `gitlab.clientId`/`gitlab.clientSecret` for GitLab). None of them is required configuration: with neither configured, the server starts and the Sources page says that no source is configured yet. An Organization holds one source, so connecting one kind replaces a source of the other.
 
 ### GitHub App
 
@@ -68,7 +70,28 @@ github.clientId=...
 github.clientSecret=...
 ```
 
-Connecting a repository is then: create an Organization, connect GitHub from its page (the OAuth authorization), and pick a repository. The picker lists every repository the App is installed on that your GitHub user can see. Its install links send you to GitHub to install the App on another account or change what an installation covers, and GitHub returns you to the picker, which lists again.
+Connecting a repository is then: create an Organization, open its **Sources** page, connect GitHub (the OAuth authorization), and pick a repository. The picker lists every repository the App is installed on that your GitHub user can see. Its install links send you to GitHub to install the App on another account or change what an installation covers, and GitHub returns you to the picker, which lists again. The source, its credential included, is stored as one JSON document on the Organization's `brief_sources` row; changing the repository keeps the credential, and a lapsed credential keeps the repository.
+
+### GitLab application
+
+Connecting a GitLab project goes through an OAuth application on the GitLab instance (**User Settings → Applications**, or a group or instance application). Register one per environment and configure it as follows:
+
+| Setting      | Value                                  |
+|--------------|----------------------------------------|
+| Redirect URI | `<base URL>/app/oauth/gitlab/callback` |
+| Confidential | On                                     |
+| Scopes       | `read_api`                             |
+
+Then put its credentials in `~/.config/the-agency-hq/the-agency/config.properties`:
+
+```properties
+gitlab.clientId=...
+gitlab.clientSecret=...
+# Only for a self-managed instance; defaults to https://gitlab.com
+gitlab.baseURL=https://gitlab.example.com
+```
+
+Connecting a project is the same workflow: open the Organization's **Sources** page, connect GitLab, and pick a project. The picker lists every project the authorizing account is a member of, directly or through a group, by its full path (`group/subgroup/project`); there is no install step, so an account that is a member of no project is told to fix that on GitLab. GitLab access tokens expire after two hours and are refreshed in place by the poller with the refresh token GitLab issues alongside them.
 
 ### Agent selection
 

@@ -5,6 +5,7 @@
 package dev.theagencyhq.agency.controller;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
@@ -20,14 +21,16 @@ import dev.theagencyhq.agency.model.Member;
  * {@code HasRole(OWNER)}. By the time a handler runs, the Organization and the caller's own membership are cached
  * on the request, so this class reads them rather than re-resolving.
  */
+@Prototype
 public class MembershipController {
   public static final String USER_ID = "userId";
   private final MembershipService membershipService;
   private final OIDC<User> oidc;
   private final JTETemplates templates;
 
-  public MembershipController(OIDC<User> oidc, JTETemplates templates) {
-    this.membershipService = Services.membershipService();
+  public MembershipController(MembershipService membershipService, @Named(Wiring.SSR) OIDC<User> oidc,
+                              JTETemplates templates) {
+    this.membershipService = membershipService;
     this.oidc = oidc;
     this.templates = templates;
   }

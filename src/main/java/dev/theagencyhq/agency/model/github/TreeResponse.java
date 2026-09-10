@@ -4,6 +4,7 @@
  */
 package dev.theagencyhq.agency.model.github;
 
+import module dev.theagencyhq.agency;
 import module java.base;
 import module org.lattejava.json;
 

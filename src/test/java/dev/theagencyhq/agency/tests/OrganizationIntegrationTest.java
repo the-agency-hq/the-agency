@@ -37,23 +37,23 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertRedirect(303, "/app/organizations/" + organizationId)
         .reset(ResetItem.Request);
     rebuild(organizationId);
-    assertNotNull(db.findSource(organizationId).orElseThrow().lastBuiltCommit());
+    assertNotNull(sources.findByOrganizationId(organizationId).orElseThrow().lastBuiltCommit());
 
     postConnect(organizationId, "acme/briefs", "main")
         .assertRedirect(303, "/app/organizations/" + organizationId)
         .reset(ResetItem.Request);
 
-    var same = db.findSource(organizationId).orElseThrow();
-    assertEquals(same.fullName(), "acme/briefs");
-    assertEquals(same.branch(), "main");
+    var same = sources.findByOrganizationId(organizationId).orElseThrow();
+    assertEquals(same.source(), "acme/briefs");
+    assertEquals(gitHub(organizationId).branch(), "main");
     assertNull(same.lastBuiltCommit());
 
     postConnect(organizationId, "acme/briefs", "trunk")
         .assertRedirect(303, "/app/organizations/" + organizationId)
         .reset(ResetItem.Request);
 
-    assertEquals(db.findSource(organizationId).orElseThrow().branch(), "trunk");
-    assertEquals(db.listSources().size(), 1);
+    assertEquals(gitHub(organizationId).branch(), "trunk");
+    assertEquals(sources.findAll().size(), 1);
   }
 
   /**
@@ -78,8 +78,8 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("already registered to another Organization"))
         .reset(ResetItem.Request);
 
-    assertTrue(db.findSource(second).isEmpty());
-    assertEquals(db.findSource(first).orElseThrow().repository(), "Briefs");
+    assertFalse(sources.findByOrganizationId(second).orElseThrow().registered());
+    assertEquals(gitHub(first).repository(), "Briefs");
   }
 
   @Test
@@ -93,7 +93,7 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("acme/private"))
         .reset(ResetItem.Request);
-    assertTrue(db.findSource(organizationId).isEmpty());
+    assertFalse(sources.findByOrganizationId(organizationId).orElseThrow().registered());
   }
 
   @Test
@@ -106,7 +106,7 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("does-not-exist"))
         .reset(ResetItem.Request);
-    assertTrue(db.findSource(organizationId).isEmpty());
+    assertFalse(sources.findByOrganizationId(organizationId).orElseThrow().registered());
   }
 
   @Test
@@ -119,7 +119,7 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("Unable to parse"))
         .reset(ResetItem.Request);
-    assertTrue(db.findSource(organizationId).isEmpty());
+    assertFalse(sources.findByOrganizationId(organizationId).orElseThrow().registered());
   }
 
   /**
@@ -138,26 +138,28 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("unsupported major"))
         .reset(ResetItem.Request);
-    assertTrue(db.findSource(organizationId).isEmpty());
+    assertFalse(sources.findByOrganizationId(organizationId).orElseThrow().registered());
   }
 
   /**
-   * Reconnecting replaces the source rather than adding a second one, and drops the poll history with it. Carrying
-   * {@code lastBuiltCommit} across a change of repository would let the next cycle compare the new repository's
-   * head against the old one's and, if they happened to agree, skip the build that was the entire point.
+   * Re-picking replaces the repository on the same source row rather than adding a second one, and drops the poll
+   * history with it. Carrying {@code lastBuiltCommit} across a change of repository would let the next cycle
+   * compare the new repository's head against the old one's and, if they happened to agree, skip the build that
+   * was the entire point. What it must not drop is the credential: the merge writes the repository members and
+   * nothing else, so the token that verified the new repository is the token that goes on polling it.
    */
   @Test
-  public void connectReplacesAnExistingSourceAndClearsItsHistory() throws Exception {
+  public void connectReplacesTheRepositoryAndClearsItsHistoryButKeepsTheCredential() throws Exception {
     github.add("acme", "briefs");
     github.add("acme", "other-briefs");
     var organizationId = createOrganization("org-replace-" + UUID.randomUUID());
-    linkGitHub(organizationId);
+    var accessToken = linkGitHub(organizationId);
 
     postConnect(organizationId, "acme/briefs", "main")
         .assertRedirect(303, "/app/organizations/" + organizationId)
         .reset(ResetItem.Request);
     rebuild(organizationId);
-    var built = db.findSource(organizationId).orElseThrow();
+    var built = sources.findByOrganizationId(organizationId).orElseThrow();
     assertEquals(built.lastStatus(), SourceStatus.OK);
     assertNotNull(built.lastBuiltCommit());
 
@@ -165,11 +167,23 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertRedirect(303, "/app/organizations/" + organizationId)
         .reset(ResetItem.Request);
 
-    var source = db.findSource(organizationId).orElseThrow();
-    assertEquals(source.repository(), "other-briefs");
+    var source = sources.findByOrganizationId(organizationId).orElseThrow();
+    assertEquals(source.id(), built.id());
+    assertEquals(source.source(), "acme/other-briefs");
+    assertEquals(gitHub(organizationId).repository(), "other-briefs");
     assertNull(source.lastBuiltCommit());
     assertNull(source.lastStatus());
-    assertEquals(db.listSources().size(), 1);
+    assertEquals(sources.findAll().size(), 1);
+    assertEquals(connection(organizationId).tokens().accessToken(), accessToken);
+
+    // The row's document holds exactly the merged shape: the discriminator, the connection, and the repository.
+    var document = database.dsl()
+                     .resultQuery("SELECT source_config::text FROM brief_sources WHERE organization_id = ?", organizationId)
+                     .fetchOne(0, String.class);
+    assertTrue(document.contains("\"type\": \"GITHUB\""), document);
+    assertTrue(document.contains("\"repository\": \"other-briefs\""), document);
+    assertTrue(document.contains("\"accessToken\": \"" + accessToken + "\""), document);
+    assertFalse(document.contains("briefs\"") && document.contains("\"repository\": \"briefs\""), document);
   }
 
   @Test
@@ -182,12 +196,15 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertRedirect(303, "/app/organizations/" + organizationId)
         .reset(ResetItem.Request);
 
-    var source = db.findSource(organizationId).orElseThrow();
-    assertEquals(source.owner(), "Acme-Corp");
-    assertEquals(source.repository(), "Brief-Sources");
-    assertEquals(source.branch(), "trunk");
-    assertEquals(source.fullName(), "Acme-Corp/Brief-Sources");
-    assertEquals(source.url(), "https://github.com/Acme-Corp/Brief-Sources");
+    var source = sources.findByOrganizationId(organizationId).orElseThrow();
+    var config = gitHub(organizationId);
+    assertEquals(config.owner(), "Acme-Corp");
+    assertEquals(config.repository(), "Brief-Sources");
+    assertEquals(config.branch(), "trunk");
+    assertEquals(config.fullName(), "Acme-Corp/Brief-Sources");
+    assertEquals(config.url(), "https://github.com/Acme-Corp/Brief-Sources");
+    assertEquals(source.source(), "Acme-Corp/Brief-Sources");
+    assertEquals(sources.findBySource(BriefSourceType.GITHUB, "acme-corp/brief-sources").orElseThrow().id(), source.id());
   }
 
   /**
@@ -202,7 +219,7 @@ public class OrganizationIntegrationTest extends BaseTest {
 
     var organizationId = createOrganization(name);
 
-    assertEquals(db.findOrganization(organizationId).orElseThrow().name(), name);
+    assertEquals(organizations.findById(organizationId).orElseThrow().name(), name);
   }
 
   /**
@@ -214,8 +231,8 @@ public class OrganizationIntegrationTest extends BaseTest {
   public void createLeavesTheOrganizationWithNoSource() {
     var organizationId = createOrganization("org-unconnected-" + UUID.randomUUID());
 
-    assertTrue(db.findSource(organizationId).isEmpty());
-    assertTrue(db.listSources().isEmpty());
+    assertTrue(sources.findByOrganizationId(organizationId).isEmpty());
+    assertTrue(sources.findAll().isEmpty());
   }
 
   /**
@@ -234,7 +251,7 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("is already registered"))
         .reset(ResetItem.Request);
 
-    assertEquals(db.listOrganizations().size(), 1);
+    assertEquals(organizations.findAll().size(), 1);
   }
 
   @Test
@@ -244,11 +261,11 @@ public class OrganizationIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("at most 255 characters"))
         .reset(ResetItem.Request);
-    assertEquals(db.listOrganizations().size(), 0);
+    assertEquals(organizations.findAll().size(), 0);
 
     // The boundary is inclusive, so one character shorter registers cleanly.
     var organizationId = createOrganization("b".repeat(255));
-    assertEquals(db.findOrganization(organizationId).orElseThrow().name().length(), 255);
+    assertEquals(organizations.findById(organizationId).orElseThrow().name().length(), 255);
   }
 
   /**
@@ -260,7 +277,7 @@ public class OrganizationIntegrationTest extends BaseTest {
   public void createSeatsTheCreatorAsActiveOwner() {
     var organizationId = createOrganization("org-owner-" + UUID.randomUUID());
 
-    var member = db.findMember(organizationId, testUser.userId()).orElseThrow();
+    var member = members.findByOrganizationIdAndUserId(organizationId, testUser.userId()).orElseThrow();
     assertEquals(member.role(), Role.OWNER);
     assertEquals(member.state(), MembershipState.ACTIVE);
     assertNull(member.invitedBy());
@@ -276,6 +293,14 @@ public class OrganizationIntegrationTest extends BaseTest {
   }
 
   /**
+   * @param organizationId The Organization.
+   * @return Its GitHub source's configuration, straight off the row.
+   */
+  private static GitHubConfig gitHub(UUID organizationId) {
+    return (GitHubConfig) sources.findByOrganizationId(organizationId).orElseThrow().config();
+  }
+
+  /**
    * Posts the repository picker's form the way the browser does: the repository as one {@code owner/name} field,
    * because that is how GitHub names it everywhere the operator has seen it.
    *
@@ -287,6 +312,6 @@ public class OrganizationIntegrationTest extends BaseTest {
   private WebTestAsserter postConnect(UUID organizationId, String fullName, String branch) {
     return test.withFormField("repository", fullName)
                .withFormField("branch", branch)
-               .post("/app/organizations/" + organizationId + "/connect");
+               .post("/app/organizations/" + organizationId + "/sources/github");
   }
 }

@@ -1,12 +1,15 @@
 @import dev.theagencyhq.agency.model.Agents
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.Brief
+@import dev.theagencyhq.agency.model.SourceDetail
 @import dev.theagencyhq.agency.model.view.OrganizationDetailView
+@import org.lattejava.http.server.HTTPRequest
 
 @param OrganizationDetailView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = model.organization().name(), content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = model.organization().name(), content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(
@@ -17,19 +20,21 @@
         <div class="flex flex-wrap items-center gap-3">
           @if(model.canManage())
             <a href="/app/organizations/${organizationId}/members/" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6-4a3 3 0 11-3-3"/></svg>
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
               Members
             </a>
             <a href="/app/organizations/${organizationId}/agents" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
               Agents
             </a>
           @endif
-          @if(model.canManage() && !model.needsGitHubConnection())
-            <a href="/app/organizations/${organizationId}/connect" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">
-              ${model.source() == null ? "Connect a repository" : "Change repository"}
+          @if(model.canManage())
+            <a href="/app/organizations/${organizationId}/sources" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+              Sources
             </a>
           @endif
-          @if(model.source() != null && model.activeMember())
+          @if(model.registered() && model.activeMember())
             <form method="post" action="/app/organizations/${organizationId}/rebuild">
               <button type="submit" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-navy-800 transition-colors">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
@@ -57,33 +62,19 @@
     </div>
   @endif
 
-  <%-- The OAuth round trip ends in a redirect, so the only place its outcome can be reported is a query
-       parameter on the page it returns to. Rendered from a fixed set of known values rather than echoed, so
-       nothing an attacker can put in the URL reaches the page. --%>
-  @if("linked".equals(model.status()))
-    <div class="mb-6">
-      @template.components.admonition(type = "success", content = @`GitHub is connected.`)
-    </div>
-  @elseif("exchange_failed".equals(model.status()))
-    <div class="mb-6">
-      @template.components.admonition(type = "warning", content = @`GitHub did not complete the authorization. This is what a declined or an already-used authorization looks like — try again.`)
-    </div>
-  @endif
-
-  @if(model.needsGitHubConnection())
+  @if(model.needsSource())
     <div class="mb-6">
       @template.components.admonition(
         type = "warning",
-        title = @`This Organization is not connected to GitHub.`,
-        content = @`Briefs are built from a GitHub repository, and nothing can be built or updated until the Organization is connected — or reconnected, if an earlier authorization has been revoked or has expired.`,
+        title = @`This Organization is not connected to a Brief source.`,
+        content = @`Briefs are built from a source such as a GitHub repository, and nothing can be built or updated until one is connected — or reconnected, if an earlier authorization has been revoked or has expired.`,
         actions = @`
-          <%-- Only an Owner can grant the credential -- the OAuth start route is Owner-gated -- so only an Owner is
-               shown the button that starts it. --%>
+          <%-- Only an Owner can reach the Sources page -- connecting a source is Owner-gated -- so only an Owner is
+               shown the way there. --%>
           @if(model.canManage())
-            <a href="/app/oauth/github/start?organizationId=${organizationId}"
+            <a href="/app/organizations/${organizationId}/sources"
                class="inline-flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 px-4 py-2 text-sm font-semibold text-white dark:text-navy-950 transition-colors">
-              <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-              Connect to GitHub
+              Connect a source
             </a>
           @endif`)
     </div>
@@ -105,17 +96,25 @@
         <dt class="dossier-label">Agents</dt>
         <dd class="mt-1 text-sm text-slate-700 dark:text-slate-300">${Agents.describe(model.organization().agents())}</dd>
       </div>
-      @if(model.source() != null)
+      @if(model.registered())
+        <%-- The kind of source, then whatever rows the source describes itself with: the page does not know what
+             a source consists of. --%>
         <div>
-          <dt class="dossier-label">Source repository</dt>
-          <dd class="mt-1">
-            <a class="font-mono text-sm text-accent-700 dark:text-accent-400 hover:underline break-all" href="${model.source().url()}" target="_blank" rel="noopener">${model.source().fullName()}</a>
-          </dd>
+          <dt class="dossier-label">Source</dt>
+          <dd class="mt-1 text-sm text-slate-700 dark:text-slate-300">${model.source().type().label()}</dd>
         </div>
-        <div>
-          <dt class="dossier-label">Branch</dt>
-          <dd class="mt-1"><code class="font-mono text-sm text-slate-700 dark:text-slate-300 break-all">${model.source().branch()}</code></dd>
-        </div>
+        @for(SourceDetail detail : model.source().config().details())
+          <div>
+            <dt class="dossier-label">${detail.label()}</dt>
+            <dd class="mt-1">
+              @if(detail.url() != null)
+                <a class="font-mono text-sm text-accent-700 dark:text-accent-400 hover:underline break-all" href="${detail.url()}" target="_blank" rel="noopener">${detail.value()}</a>
+              @else
+                <code class="font-mono text-sm text-slate-700 dark:text-slate-300 break-all">${detail.value()}</code>
+              @endif
+            </dd>
+          </div>
+        @endfor
         <div>
           <dt class="dossier-label">Status</dt>
           <dd class="mt-1">@template.components.status-badge(status = model.source().lastStatus())</dd>
@@ -134,11 +133,11 @@
     </dl>
     <!-- Outside the <dl>, not a row inside it: a <dl> child <div> has to hold a <dt>/<dd> pair, and this is prose
          about the absence of one. -->
-    @if(model.source() == null)
+    @if(!model.registered())
       <p class="mt-5 text-sm text-slate-500 dark:text-slate-400">
         No source is registered for this Organization, so nothing is being built for it.
-        @if(model.canManage() && !model.needsGitHubConnection())
-          <a class="font-semibold text-accent-700 dark:text-accent-400 hover:underline" href="/app/organizations/${organizationId}/connect">Connect a GitHub repository</a>.
+        @if(model.canManage() && !model.needsSource())
+          <a class="font-semibold text-accent-700 dark:text-accent-400 hover:underline" href="/app/organizations/${organizationId}/sources">Choose what to build from</a>.
         @endif
       </p>
     @endif

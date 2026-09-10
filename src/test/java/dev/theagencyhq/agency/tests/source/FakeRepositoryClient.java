@@ -2,13 +2,15 @@
  * Copyright (c) 2026 The Agency HQ
  * SPDX-License-Identifier: MIT
  */
-package dev.theagencyhq.agency.tests.github;
+package dev.theagencyhq.agency.tests.source;
 
 import module dev.theagencyhq.agency;
 import module java.base;
 
 /**
- * An in-memory GitHub, standing in for {@link GitHubClient} throughout the suite.
+ * An in-memory repository host, standing in for a {@link RepositoryClient} throughout the suite. One class for both
+ * hosts — it implements {@link GitHubClient} and {@link GitLabClient} alike — because the contract is the same and
+ * the suite proves that the code above it cannot tell them apart; {@code BaseTest} holds one instance per host.
  *
  * <p>The one thing worth explaining is the commit. A repository here has no history — it is a mutable map of paths
  * to bytes — and its head is the SHA-256 of that map's contents. That gives the poller exactly the property it
@@ -18,12 +20,11 @@ import module java.base;
  *
  * <p>Every failure mode the Agency has a branch for can be provoked: {@link #revokeAll} for an authorization that
  * has lapsed, {@link #failExchange} and {@link #failRefresh} for the two OAuth grants, {@link #fail} and
- * {@link #failContents} for GitHub being unreachable, and simply not registering a repository for one that is not
+ * {@link #failContents} for the host being unreachable, and simply not registering a repository for one that is not
  * visible.
  */
-public class FakeGitHubClient implements GitHubClient {
-  public static final long INSTALLATION_ID = 42L;
-  public static final String USER_LOGIN = "agency-test";
+public class FakeRepositoryClient implements GitHubClient, GitLabClient {
+  private final String login;
   private final Map<String, Repository> repositories = new ConcurrentHashMap<>();
   private final Set<String> revoked = ConcurrentHashMap.newKeySet();
   private final AtomicInteger tokenCounter = new AtomicInteger();
@@ -33,8 +34,15 @@ public class FakeGitHubClient implements GitHubClient {
   private volatile boolean failRefresh;
   private volatile Duration tokenLifetime = Duration.ofHours(8);
 
-  private static String key(String owner, String repository) {
-    return (owner + "/" + repository).toLowerCase(Locale.ROOT);
+  /**
+   * @param login The account every token this host issues belongs to, as {@link #login(String)} reports it.
+   */
+  public FakeRepositoryClient(String login) {
+    this.login = login;
+  }
+
+  private static String key(String fullName) {
+    return fullName.toLowerCase(Locale.ROOT);
   }
 
   /**
@@ -43,14 +51,14 @@ public class FakeGitHubClient implements GitHubClient {
    *     explicitly by removing it.
    */
   public Repository add(String owner, String name) {
-    var repository = new Repository(owner, name);
+    var repository = new Repository(owner + "/" + name);
     repository.putFile("the-agency-hq-settings.json", "{\"version\":\"1.0.0\"}");
-    repositories.put(key(owner, name), repository);
+    repositories.put(key(repository.fullName), repository);
     return repository;
   }
 
   @Override
-  public RepositoryContents contents(String accessToken, String owner, String repository, String commit) {
+  public RepositoryContents contents(String accessToken, String fullName, String commit) {
     throwIfFailing();
     var contentsOnly = contentsFailure;
     if (contentsOnly != null) {
@@ -58,22 +66,22 @@ public class FakeGitHubClient implements GitHubClient {
     }
 
     requireValid(accessToken);
-    var found = find(accessToken, owner, repository);
+    var found = find(accessToken, fullName);
     if (found == null) {
-      throw new GitHubException("No repository [" + owner + "/" + repository + "]");
+      throw new RepositoryException("No repository [" + fullName + "]");
     }
 
     return new RepositoryContents(commit, found.files(), found.modes());
   }
 
   @Override
-  public GitHubTokens exchangeCode(String code, String redirectURI) {
+  public OAuthTokens exchangeCode(String code, String redirectURI) {
     throwIfFailing();
     return failExchange ? null : issue();
   }
 
   /**
-   * Makes every API call throw, as an unreachable GitHub does.
+   * Makes every API call throw, as an unreachable host does.
    *
    * @param failure The exception to throw, or {@code null} to stop failing.
    */
@@ -101,42 +109,48 @@ public class FakeGitHubClient implements GitHubClient {
   }
 
   @Override
-  public String head(String accessToken, String owner, String repository, String ref) {
+  public String head(String accessToken, String fullName, String ref) {
     throwIfFailing();
     requireValid(accessToken);
-    var found = find(accessToken, owner, repository);
+    var found = find(accessToken, fullName);
     return found == null || !found.branches.contains(ref) ? null : found.commit();
   }
 
-  @Override
-  public List<GitHubInstallation> installations(String accessToken) {
-    throwIfFailing();
-    requireValid(accessToken);
-    return List.of(new GitHubInstallation(INSTALLATION_ID));
+  /**
+   * @return The account this host issues tokens for.
+   */
+  public String login() {
+    return login;
   }
 
   @Override
-  public byte[] readFile(String accessToken, String owner, String repository, String ref, String path) {
+  public String login(String accessToken) {
+    throwIfFailing();
+    return valid(accessToken) ? login : null;
+  }
+
+  @Override
+  public byte[] readFile(String accessToken, String fullName, String ref, String path) {
     throwIfFailing();
     requireValid(accessToken);
-    var found = find(accessToken, owner, repository);
+    var found = find(accessToken, fullName);
     return found == null || !found.branches.contains(ref) ? null : found.files.get(path);
   }
 
   @Override
-  public GitHubTokens refresh(String refreshToken) {
+  public OAuthTokens refresh(String refreshToken) {
     throwIfFailing();
     return failRefresh || revoked.contains(refreshToken) ? null : issue();
   }
 
   @Override
-  public List<GitHubRepository> repositories(String accessToken, long installationId) {
+  public List<RepositorySummary> repositories(String accessToken) {
     throwIfFailing();
     requireValid(accessToken);
     return repositories.values()
                        .stream()
-                       .map(r -> new GitHubRepository(r.owner + "/" + r.name, r.defaultBranch))
-                       .sorted(Comparator.comparing(GitHubRepository::fullName))
+                       .map(r -> new RepositorySummary(r.fullName, r.defaultBranch))
+                       .sorted(Comparator.comparing(RepositorySummary::fullName))
                        .toList();
   }
 
@@ -154,8 +168,7 @@ public class FakeGitHubClient implements GitHubClient {
   }
 
   /**
-   * Makes every token and refresh token issued so far stop working, as revoking the App's authorization on GitHub
-   * does.
+   * Makes every token and refresh token issued so far stop working, as revoking the authorization on the host does.
    */
   public void revokeAll() {
     for (var i = 0; i <= tokenCounter.get(); i++) {
@@ -172,29 +185,23 @@ public class FakeGitHubClient implements GitHubClient {
     this.tokenLifetime = lifetime;
   }
 
-  @Override
-  public GitHubUser user(String accessToken) {
-    throwIfFailing();
-    return valid(accessToken) ? new GitHubUser(USER_LOGIN) : null;
+  private Repository find(String accessToken, String fullName) {
+    return valid(accessToken) ? repositories.get(key(fullName)) : null;
   }
 
-  private Repository find(String accessToken, String owner, String repository) {
-    return valid(accessToken) ? repositories.get(key(owner, repository)) : null;
+  private OAuthTokens issue() {
+    var n = tokenCounter.incrementAndGet();
+    return new OAuthTokens("access-" + n, Instant.now().plus(tokenLifetime), "refresh-" + n,
+        Instant.now().plus(Duration.ofDays(180)));
   }
 
-  // Mirrors the real client's 401 handling, which is the distinction the poller branches on: a rejected credential
+  // Mirrors the real clients' 401 handling, which is the distinction the poller branches on: a rejected credential
   // is not the same answer as a repository that is not there, and a fake that reported both as absence would let
   // the NOT_CONNECTED path go untested.
   private void requireValid(String accessToken) {
     if (!valid(accessToken)) {
-      throw new GitHubUnauthorizedException("The token [" + accessToken + "] is not valid");
+      throw new RepositoryUnauthorizedException("The token [" + accessToken + "] is not valid");
     }
-  }
-
-  private GitHubTokens issue() {
-    var n = tokenCounter.incrementAndGet();
-    return new GitHubTokens("access-" + n, Instant.now().plus(tokenLifetime), "refresh-" + n,
-        Instant.now().plus(Duration.ofDays(180)));
   }
 
   private void throwIfFailing() {
@@ -215,14 +222,12 @@ public class FakeGitHubClient implements GitHubClient {
   public static class Repository {
     private final Set<String> branches = ConcurrentHashMap.newKeySet();
     private final Map<String, byte[]> files = new ConcurrentHashMap<>();
+    private final String fullName;
     private final Map<String, String> modes = new ConcurrentHashMap<>();
-    private final String name;
-    private final String owner;
     private volatile String defaultBranch = "main";
 
-    Repository(String owner, String name) {
-      this.name = name;
-      this.owner = owner;
+    Repository(String fullName) {
+      this.fullName = fullName;
       branches.add(defaultBranch);
     }
 
@@ -238,8 +243,8 @@ public class FakeGitHubClient implements GitHubClient {
     public String commit() {
       var digest = new StringBuilder();
       files.keySet().stream().sorted().forEach(path ->
-          digest.append(path).append(' ')
-                .append(modes.getOrDefault(path, "100644")).append(' ')
+          digest.append(path).append(' ')
+                .append(modes.getOrDefault(path, "100644")).append(' ')
                 .append(Checksums.sha256Hex(files.get(path))).append('\n'));
       return Checksums.sha256Hex(digest.toString().getBytes(StandardCharsets.UTF_8));
     }
@@ -250,14 +255,14 @@ public class FakeGitHubClient implements GitHubClient {
       return this;
     }
 
-    public Map<String, byte[]> files() {
-      return Map.copyOf(files);
-    }
-
     public Repository executable(String path, String content) {
       putFile(path, content);
       modes.put(path, TreeEntry.MODE_EXECUTABLE);
       return this;
+    }
+
+    public Map<String, byte[]> files() {
+      return Map.copyOf(files);
     }
 
     public Map<String, String> modes() {

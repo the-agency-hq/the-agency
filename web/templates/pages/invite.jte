@@ -1,11 +1,13 @@
 @import dev.theagencyhq.agency.model.Role
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.MemberInviteView
+@import org.lattejava.http.server.HTTPRequest
 
 @param MemberInviteView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = "Invite a member", content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = "Invite a member", content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(

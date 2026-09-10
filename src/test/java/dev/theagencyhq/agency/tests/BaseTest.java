@@ -13,7 +13,7 @@ import module org.testng;
 import dev.theagencyhq.agency.Main;
 import dev.theagencyhq.agency.model.Member;
 import dev.theagencyhq.agency.model.User;
-import dev.theagencyhq.agency.tests.github.*;
+import dev.theagencyhq.agency.tests.source.*;
 
 import static org.testng.Assert.*;
 
@@ -29,13 +29,14 @@ import static org.testng.Assert.*;
  * make every HTTP test class fail in configuration with "one of the listeners threw an exception", which reads like a
  * broken build rather than an occupied port.
  *
- * <p>GitHub is the one dependency the suite fakes. {@link #github} is an in-memory GitHub, handed to {@code Main} so
- * every service is built on it; everything else — FusionAuth, Postgres — is the real thing running locally, and the
- * GitHub credentials these tests store are genuinely written to and read back from the {@code organizations} table.
+ * <p>The repository hosts are the one dependency the suite fakes. {@link #github} and {@link #gitlab} are in-memory
+ * hosts, handed to {@code Main} so every service is built on them; everything else — FusionAuth, Postgres — is the
+ * real thing running locally, and the credentials these tests store are genuinely written to and read back from
+ * the {@code brief_sources} table.
  *
- * <p>{@code @BeforeMethod} truncates the database and empties the fake, so every test starts from empty and no test
+ * <p>{@code @BeforeMethod} truncates the database and empties the fakes, so every test starts from empty and no test
  * has to bookkeep what it created. {@code organizations} is the only root: {@code brief_sources} and {@code briefs}
- * both cascade from it — and every GitHub credential lives in its columns — so deleting it clears everything.
+ * both cascade from it — and every credential lives in a source row — so deleting it clears everything.
  */
 public abstract class BaseTest {
   /**
@@ -74,21 +75,27 @@ public abstract class BaseTest {
    */
   public static OIDCTestFixture apiOIDC;
   public static BriefingService briefingService;
-  public static DatabaseService db;
+  public static BriefRepository briefs;
+  public static SourceCatalog catalog;
+  public static Database database;
+  public static BriefSourceRepository sources;
   /**
    * The real FusionAuth client, for the membership tests to look up and clean up the users the invite flow
    * creates. Everything else authenticates through the OIDC fixtures rather than this.
    */
   public static FusionAuthClient fusionAuth;
-  public static FakeGitHubClient github = new FakeGitHubClient();
-  public static GitHubLinkService links;
+  public static FakeRepositoryClient github = new FakeRepositoryClient("agency-test");
+  public static FakeRepositoryClient gitlab = new FakeRepositoryClient("agency-test-gitlab");
+  public static SourceLinkService links;
   public static Main main;
+  public static MemberRepository members;
   public static MembershipService membershipService;
   /**
    * The {@link #ORDINARY_EMAIL} user as the application sees it, resolved from FusionAuth in {@code beforeSuite}
    * because the kickstart generates the UUID.
    */
   public static User ordinaryUser;
+  public static OrganizationRepository organizations;
   public static OrganizationService organizationService;
   public static PollerService pollerService;
   /**
@@ -111,14 +118,19 @@ public abstract class BaseTest {
 
   @BeforeSuite
   public static void beforeSuite() throws Exception {
-    main = new Main(TEST_PORT, true, github);
+    main = new Main(TEST_PORT, true, github, gitlab);
     main.main();
-    briefingService = Services.briefingService();
-    db = Services.databaseService();
-    links = Services.gitHubLinkService();
-    membershipService = Services.membershipService();
-    organizationService = Services.organizationService();
-    pollerService = Services.pollerService();
+    briefingService = main.inject(BriefingService.class);
+    briefs = main.inject(BriefRepository.class);
+    catalog = main.inject(SourceCatalog.class);
+    database = main.inject(Database.class);
+    sources = main.inject(BriefSourceRepository.class);
+    links = main.inject(SourceLinkService.class);
+    members = main.inject(MemberRepository.class);
+    membershipService = main.inject(MembershipService.class);
+    organizations = main.inject(OrganizationRepository.class);
+    organizationService = main.inject(OrganizationService.class);
+    pollerService = main.inject(PollerService.class);
     apiOIDC = new OIDCTestFixture(test, main.apiConfig);
     ssrOIDC = new OIDCTestFixture(test, main.ssrConfig, main.ssrSettings);
 
@@ -182,7 +194,7 @@ public abstract class BaseTest {
    * @return The stored Brief, carrying the version the insert assigned.
    */
   public static Brief insertBrief(Organization organization, String checksum, BriefFile... files) {
-    return db.insertBrief(new Brief(checksum, organization, null, List.of(files), "abc", TEST_INSTANT));
+    return briefs.create(new Brief(checksum, organization, null, List.of(files), "abc", TEST_INSTANT));
   }
 
   /**
@@ -200,7 +212,7 @@ public abstract class BaseTest {
         state == MembershipState.PENDING ? testUser.userId() : null,
         state == MembershipState.PENDING ? TEST_INSTANT : null,
         state == MembershipState.ACTIVE ? TEST_INSTANT : null);
-    db.insertMember(member);
+    members.create(member);
     return member;
   }
 
@@ -218,14 +230,14 @@ public abstract class BaseTest {
    * Inserts an Organization with {@link #testUser} seated as its ACTIVE OWNER, matching what creating one through
    * the service or the form produces — and what nearly every test needs now that memberships gate both the admin
    * UI and the APIs. A test that wants an Organization the test user cannot see inserts a
-   * {@code new Organization(...)} through {@link DatabaseService#insertOrganization} directly.
+   * {@code new Organization(...)} through {@link OrganizationRepository#create} directly.
    *
    * @param name The Organization's display name.
    * @return The inserted Organization.
    */
   public static Organization insertOrganization(String name) {
-    var organization = new Organization(UUID.randomUUID(), name, null, null, TEST_INSTANT, TEST_INSTANT);
-    db.insertOrganization(organization);
+    var organization = new Organization(UUID.randomUUID(), name, null, TEST_INSTANT, TEST_INSTANT);
+    organizations.create(organization);
     insertMember(organization, testUser, Role.OWNER, MembershipState.ACTIVE);
     return organization;
   }
@@ -235,9 +247,9 @@ public abstract class BaseTest {
    * where it wants one.
    */
   public static void resetDatabase() {
-    // ON DELETE CASCADE carries brief_sources and briefs with it, so this is the whole graph. Raw SQL because
-    // DatabaseService deliberately exposes no bulk delete on its production API.
-    db.dsl().execute("DELETE FROM organizations");
+    // ON DELETE CASCADE carries brief_sources and briefs with it, so this is the whole graph. Raw SQL because no
+    // repository exposes a bulk delete on its production API.
+    database.dsl().execute("DELETE FROM organizations");
   }
 
   /**
@@ -260,6 +272,7 @@ public abstract class BaseTest {
   public void beforeMethod() throws Exception {
     resetDatabase();
     github.reset();
+    gitlab.reset();
 
     // The tester is shared by the whole suite and accumulates headers, form fields, and a body until something
     // clears them. Clearing here means a method starts from nothing, exactly as it starts with an empty database,
@@ -268,20 +281,21 @@ public abstract class BaseTest {
   }
 
   /**
-   * Registers a repository as an Organization's source through the service, as the connect form does. The
-   * Organization has to hold a GitHub credential first — {@link #linkGitHub(UUID)} — because the connection is
-   * verified against the token it holds.
+   * Registers a repository on an Organization's source through the service, as the picker form does. The
+   * Organization has to hold a credential first — {@link #link(BriefSourceType, UUID)} — because that is what
+   * creates the source row, decides which host the repository is verified against, and provides the token it is
+   * verified with.
    *
    * @param organizationId The Organization to connect.
-   * @param owner          The repository owner.
-   * @param repository     The repository name.
+   * @param fullName       The repository as its host names it.
    */
-  protected void connect(UUID organizationId, String owner, String repository) {
-    connect(organizationId, owner, repository, "main");
+  protected void connect(UUID organizationId, String fullName) {
+    connect(organizationId, fullName, "main");
   }
 
-  protected void connect(UUID organizationId, String owner, String repository, String branch) {
-    organizationService.connect(organizationId, links.accessToken(organizationId), owner, repository, branch);
+  protected void connect(UUID organizationId, String fullName, String branch) {
+    var type = sources.findByOrganizationId(organizationId).orElseThrow().type();
+    organizationService.connect(type, organizationId, links.accessToken(organizationId), fullName, branch);
   }
 
   /**
@@ -309,18 +323,43 @@ public abstract class BaseTest {
   }
 
   /**
-   * Gives an Organization a GitHub authorization, by running the real link flow with the fake GitHub's canned code
-   * exchange. The credential that results lands in the {@code organizations} columns — the same ones the poller
-   * reads — so nothing here stubs out the half of the mechanism most worth exercising.
+   * @param organizationId The Organization.
+   * @return The authorization its source holds, read back off the {@code brief_sources} row, or {@code null} if it
+   *     holds none — no source, or a source whose credential has been removed.
+   */
+  protected static OAuthConnection connection(UUID organizationId) {
+    return SourceLinkService.connection(sources.findByOrganizationId(organizationId).orElse(null));
+  }
+
+  /**
+   * @param type A kind of source.
+   * @return The fake standing in for that kind's host.
+   */
+  protected static FakeRepositoryClient fake(BriefSourceType type) {
+    return type == BriefSourceType.GITHUB ? github : gitlab;
+  }
+
+  /**
+   * Gives an Organization an authorization with a host, by running the real link flow with the fake host's canned
+   * code exchange. The credential that results lands in the {@code brief_sources} row — the same document the
+   * poller reads — so nothing here stubs out the half of the mechanism most worth exercising.
    *
+   * @param type           The kind of source to connect.
    * @param organizationId The Organization to connect.
    * @return The access token now stored against the Organization.
    */
-  protected String linkGitHub(UUID organizationId) {
-    var result = links.link(organizationId, "test-code",
-        "http://localhost:" + TEST_PORT + "/app/oauth/github/callback");
-    assertEquals(result, GitHubLinkService.LinkResult.LINKED);
+  protected String link(BriefSourceType type, UUID organizationId) {
+    var result = links.link(type, organizationId, "test-code",
+        "http://localhost:" + TEST_PORT + RepositorySourceController.callbackPath(type));
+    assertEquals(result, SourceLinkService.LinkResult.LINKED);
     return links.accessToken(organizationId);
+  }
+
+  /**
+   * {@link #link} for GitHub, which most of the suite connects.
+   */
+  protected String linkGitHub(UUID organizationId) {
+    return link(BriefSourceType.GITHUB, organizationId);
   }
 
   /**
@@ -332,7 +371,7 @@ public abstract class BaseTest {
   protected void rebuild(UUID organizationId) {
     test.post("/app/organizations/" + organizationId + "/rebuild")
         .assertRedirect(303, "/app/organizations/" + organizationId);
-    Services.pollerService().testRun();
+    pollerService.testRun();
   }
 
   /**
@@ -345,6 +384,6 @@ public abstract class BaseTest {
    */
   protected SourceStatus runCycle(UUID organizationId) {
     pollerService.testRun();
-    return db.findSource(organizationId).orElseThrow().lastStatus();
+    return sources.findByOrganizationId(organizationId).orElseThrow().lastStatus();
   }
 }

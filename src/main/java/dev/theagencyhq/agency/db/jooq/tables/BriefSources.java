@@ -8,6 +8,7 @@ import dev.theagencyhq.agency.db.jooq.Keys;
 import dev.theagencyhq.agency.db.jooq.Public;
 import dev.theagencyhq.agency.db.jooq.tables.Organizations.OrganizationsPath;
 import dev.theagencyhq.agency.db.jooq.tables.records.BriefSourcesRecord;
+import dev.theagencyhq.agency.model.BriefSourceType;
 import dev.theagencyhq.agency.model.SourceStatus;
 
 import java.time.Instant;
@@ -22,6 +23,7 @@ import org.jooq.Converter;
 import org.jooq.Field;
 import org.jooq.ForeignKey;
 import org.jooq.InverseForeignKey;
+import org.jooq.JSONB;
 import org.jooq.Name;
 import org.jooq.Path;
 import org.jooq.PlainSQL;
@@ -73,21 +75,6 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
     public final TableField<BriefSourcesRecord, UUID> ORGANIZATION_ID = createField(DSL.name("organization_id"), SQLDataType.UUID.nullable(false), this, "");
 
     /**
-     * The column <code>public.brief_sources.owner</code>.
-     */
-    public final TableField<BriefSourcesRecord, String> OWNER = createField(DSL.name("owner"), SQLDataType.CLOB.nullable(false), this, "");
-
-    /**
-     * The column <code>public.brief_sources.repository</code>.
-     */
-    public final TableField<BriefSourcesRecord, String> REPOSITORY = createField(DSL.name("repository"), SQLDataType.CLOB.nullable(false), this, "");
-
-    /**
-     * The column <code>public.brief_sources.branch</code>.
-     */
-    public final TableField<BriefSourcesRecord, String> BRANCH = createField(DSL.name("branch"), SQLDataType.CLOB.nullable(false), this, "");
-
-    /**
      * The column <code>public.brief_sources.last_built_commit</code>.
      */
     public final TableField<BriefSourcesRecord, String> LAST_BUILT_COMMIT = createField(DSL.name("last_built_commit"), SQLDataType.CLOB, this, "");
@@ -116,6 +103,21 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
      * The column <code>public.brief_sources.update_instant</code>.
      */
     public final TableField<BriefSourcesRecord, Instant> UPDATE_INSTANT = createField(DSL.name("update_instant"), SQLDataType.BIGINT.nullable(false), this, "", Converter.ofNullable(Long.class, Instant.class, t -> t == null ? null : java.time.Instant.ofEpochMilli(t), u -> u == null ? null : u.toEpochMilli()));
+
+    /**
+     * The column <code>public.brief_sources.type</code>.
+     */
+    public final TableField<BriefSourcesRecord, BriefSourceType> TYPE = createField(DSL.name("type"), SQLDataType.CLOB.nullable(false), this, "", Converter.ofNullable(String.class, BriefSourceType.class, t -> t == null ? null : dev.theagencyhq.agency.model.BriefSourceType.valueOf(t), u -> u == null ? null : u.name()));
+
+    /**
+     * The column <code>public.brief_sources.source</code>.
+     */
+    public final TableField<BriefSourcesRecord, String> SOURCE = createField(DSL.name("source"), SQLDataType.CLOB, this, "");
+
+    /**
+     * The column <code>public.brief_sources.source_config</code>.
+     */
+    public final TableField<BriefSourcesRecord, JSONB> SOURCE_CONFIG = createField(DSL.name("source_config"), SQLDataType.JSONB.nullable(false), this, "");
 
     private BriefSources(Name alias, Table<BriefSourcesRecord> aliased) {
         this(alias, aliased, (Field<?>[]) null, null);
@@ -215,6 +217,8 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
     @Override
     public List<Check<BriefSourcesRecord>> getChecks() {
         return Arrays.asList(
+            Internal.createCheck(this, DSL.name("brief_sources_ck_source_config_type"), "(((source_config ->> 'type'::text) = type))", true),
+            Internal.createCheck(this, DSL.name("brief_sources_ck_type"), "((type = ANY (ARRAY['GITHUB'::text, 'GITLAB'::text])))", true),
             Internal.createCheck(this, DSL.name("brief_sources_last_status_check"), "((last_status = ANY (ARRAY['BUILD_FAILED'::text, 'FETCH_FAILED'::text, 'NOT_CONNECTED'::text, 'OK'::text, 'UNCHANGED'::text])))", true)
         );
     }

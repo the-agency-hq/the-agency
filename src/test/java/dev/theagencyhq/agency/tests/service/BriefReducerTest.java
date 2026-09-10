@@ -43,7 +43,7 @@ public class BriefReducerTest {
 
   private static Brief brief(List<Agent> agents, String... paths) {
     var organization = new Organization(UUID.fromString("00000000-0000-4000-8000-000000000042"), "fusionauth",
-        agents == null ? null : new Agents(agents), null, null, null);
+        agents == null ? null : new Agents(agents), null, null);
     var files = Arrays.stream(paths)
                       .map(p -> new BriefFile(p, null, null, "x", Checksums.sha256Hex("x".getBytes()), List.of()))
                       .toList();

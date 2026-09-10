@@ -41,7 +41,7 @@ public class AgentSelectionIntegrationTest extends BaseTest {
     test.withFormField("agents", "CLAUDE")
         .post("/app/organizations/" + organization.id() + "/agents")
         .assertRedirect(303, "/app/organizations/");
-    assertNull(db.findOrganization(organization.id()).orElseThrow().agents());
+    assertNull(organizations.findById(organization.id()).orElseThrow().agents());
   }
 
   /**
@@ -57,14 +57,14 @@ public class AgentSelectionIntegrationTest extends BaseTest {
         .withFormField("agents", "CLAUDE")
         .post("/app/organizations/" + organization.id() + "/agents")
         .assertRedirect(303, "/app/organizations/" + organization.id());
-    assertNull(db.findOrganization(organization.id()).orElseThrow().agents());
+    assertNull(organizations.findById(organization.id()).orElseThrow().agents());
   }
 
   @Test
   public void anEmptySelectionIsRejectedAndChangesNothing() {
     var organization = insertOrganization("agents-empty-" + UUID.randomUUID());
     organizationService.updateAgents(organization, new Agents(List.of(Agent.CLAUDE)));
-    insertBrief(db.findOrganization(organization.id()).orElseThrow(), "sum-1", briefFile(CLAUDE_RULE, "a"));
+    insertBrief(organizations.findById(organization.id()).orElseThrow(), "sum-1", briefFile(CLAUDE_RULE, "a"));
 
     // No fields at all: All unchecked, nothing picked. An unknown value is dropped rather than rejected, so it is
     // the same submission.
@@ -73,8 +73,8 @@ public class AgentSelectionIntegrationTest extends BaseTest {
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("Select at least one Agent, or All."));
 
-    assertEquals(db.findOrganization(organization.id()).orElseThrow().agents(), new Agents(List.of(Agent.CLAUDE)));
-    assertEquals(db.listBriefs(organization.id()).size(), 1);
+    assertEquals(organizations.findById(organization.id()).orElseThrow().agents(), new Agents(List.of(Agent.CLAUDE)));
+    assertEquals(briefs.findAllByOrganizationId(organization.id()).size(), 1);
   }
 
   /**
@@ -91,7 +91,7 @@ public class AgentSelectionIntegrationTest extends BaseTest {
     briefing(orgRequest(organization.id(), 1, "sum-1")).assertStatus(304);
 
     assertTrue(organizationService.updateAgents(organization, new Agents(List.of(Agent.CODEX))));
-    var v2 = db.findLatestBrief(organization.id()).orElseThrow();
+    var v2 = briefs.findLatestByOrganizationId(organization.id()).orElseThrow();
     assertEquals(v2.version(), 2);
     assertNotEquals(v2.checksum(), v1.checksum());
     assertEquals(paths(v2), paths(v1), "The stored version keeps every file");
@@ -147,9 +147,9 @@ public class AgentSelectionIntegrationTest extends BaseTest {
         .assertRedirect(303, "/app/organizations/" + organization.id())
         .reset(ResetItem.Request);
 
-    assertEquals(db.findOrganization(organization.id()).orElseThrow().agents(),
+    assertEquals(organizations.findById(organization.id()).orElseThrow().agents(),
         new Agents(List.of(Agent.CLAUDE, Agent.CODEX)));
-    var versions = db.listBriefs(organization.id());
+    var versions = briefs.findAllByOrganizationId(organization.id());
     assertEquals(versions.size(), 2);
     var v2 = versions.getFirst();
     assertEquals(v2.version(), 2);
@@ -177,14 +177,14 @@ public class AgentSelectionIntegrationTest extends BaseTest {
         .post("/app/organizations/" + organization.id() + "/agents")
         .assertRedirect(303, "/app/organizations/" + organization.id())
         .reset(ResetItem.Request);
-    assertEquals(db.listBriefs(organization.id()).size(), 2);
+    assertEquals(briefs.findAllByOrganizationId(organization.id()).size(), 2);
 
     test.withFormField("all", "on")
         .post("/app/organizations/" + organization.id() + "/agents")
         .assertRedirect(303, "/app/organizations/" + organization.id())
         .reset(ResetItem.Request);
-    assertNull(db.findOrganization(organization.id()).orElseThrow().agents());
-    var v3 = db.findLatestBrief(organization.id()).orElseThrow();
+    assertNull(organizations.findById(organization.id()).orElseThrow().agents());
+    var v3 = briefs.findLatestByOrganizationId(organization.id()).orElseThrow();
     assertEquals(v3.version(), 3);
     assertNull(v3.organization().agents());
     assertEquals(v3.checksum(), BriefBuilder.checksum(new Brief(null, v3.organization(), null, v3.files(), null, null)));
@@ -198,8 +198,8 @@ public class AgentSelectionIntegrationTest extends BaseTest {
         .post("/app/organizations/" + organization.id() + "/agents")
         .assertRedirect(303, "/app/organizations/" + organization.id());
 
-    assertEquals(db.findOrganization(organization.id()).orElseThrow().agents(), new Agents(List.of(Agent.GEMINI)));
-    assertTrue(db.listBriefs(organization.id()).isEmpty());
+    assertEquals(organizations.findById(organization.id()).orElseThrow().agents(), new Agents(List.of(Agent.GEMINI)));
+    assertTrue(briefs.findAllByOrganizationId(organization.id()).isEmpty());
   }
 
   @BeforeMethod

@@ -17,9 +17,14 @@ import org.lattejava.web.Configuration;
 import static dev.theagencyhq.agency.db.jooq.Tables.*;
 import static org.testng.Assert.*;
 
+/**
+ * {@code Database} on its own: the pool it opens, the migrations it applies, and what it leaves behind when they
+ * fail. Every method stands up a database of its own from the suite's configuration rather than touching the
+ * application's singleton, which the rest of the suite is running on.
+ */
 @SuppressWarnings("BusyWait")
 @Test
-public class DatabaseServiceTest {
+public class DatabaseTest {
   private static void assertNoLeakedPoolThreads(Set<String> threadsBefore) throws InterruptedException {
     var deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
     Set<String> leaked;
@@ -34,11 +39,19 @@ public class DatabaseServiceTest {
     fail("HikariCP pool threads leaked after a migration failure [" + leaked + "]");
   }
 
+  private static Configuration config() {
+    return new Configuration(
+        List.of("db.password", "db.url", "db.username"),
+        Path.of("src/test/resources/config.properties"),
+        Path.of("src/main/resources/config.properties")
+    );
+  }
+
   // Corrupts the checksum recorded for the 0.1.0 migration so the *next* Migrator run fails with a
   // ChecksumException, and returns the original checksum so the caller can restore it. This reproduces a
   // migration failure against a database that accepts connections fine -- unlike an unreachable db.url, which
   // fails HikariCP's own fail-fast pool-initialization check (a PoolInitializationException thrown by
-  // `new HikariDataSource(...)` itself) before DatabaseService's migration try/catch is ever reached.
+  // `new HikariDataSource(...)` itself) before Database's migration try/catch is ever reached.
   private static String corruptChecksum(Configuration config) throws SQLException {
     try (Connection connection = rawConnection(config)) {
       try {
@@ -68,7 +81,7 @@ public class DatabaseServiceTest {
   }
 
   private static Set<String> poolThreads() {
-    // "the-agency" is the pool name DatabaseService assigns to every HikariDataSource it creates.
+    // "the-agency" is the pool name Database assigns to every HikariDataSource it creates.
     return Thread.getAllStackTraces()
                  .keySet()
                  .stream()
@@ -92,18 +105,14 @@ public class DatabaseServiceTest {
 
   @Test
   public void closesPoolOnMigrationFailure() throws Exception {
-    var config = new Configuration(
-        List.of("db.password", "db.url", "db.username"),
-        Path.of("src/test/resources/config.properties"),
-        Path.of("src/main/resources/config.properties")
-    );
+    var config = config();
     var url = config.get("db.url");
 
     var originalChecksum = corruptChecksum(config);
     try {
       var threadsBefore = poolThreads();
 
-      var exception = expectThrows(IllegalStateException.class, () -> new DatabaseService(config));
+      var exception = expectThrows(IllegalStateException.class, () -> new Database(config));
       assertEquals(exception.getMessage(), "Unable to migrate the database [" + url + "]");
       assertTrue(exception.getCause() instanceof MigrationException);
 
@@ -117,46 +126,17 @@ public class DatabaseServiceTest {
 
   @Test
   public void migratesAndQueries() {
-    var config = new Configuration(
-        List.of("db.password", "db.url", "db.username"),
-        Path.of("src/test/resources/config.properties"),
-        Path.of("src/main/resources/config.properties")
-    );
-
-    var service = new DatabaseService(config);
+    var database = new Database(config());
     try {
-      assertNotNull(service.dsl());
+      assertNotNull(database.dsl());
 
       // The migration ran, so the table exists and is queryable. Deliberately not asserting the count is zero: it
       // used to be the suite's leak detector, back when every class cleaned up after itself and a forgotten delete
       // surfaced here. BaseTest empties the database before every method now, so isolation is structural and this
       // assertion would only be testing which class happened to run last.
-      assertNotNull(service.dsl().selectCount().from(ORGANIZATIONS).fetchOne(0, int.class));
+      assertNotNull(database.dsl().selectCount().from(ORGANIZATIONS).fetchOne(0, int.class));
     } finally {
-      service.close();
-    }
-  }
-
-  /**
-   * The poll cycle reads {@code listSources()} once and then works through the result, so an Organization deleted
-   * partway through leaves it recording a status against a {@code brief_sources} row the cascade has already removed.
-   * An UPDATE matching zero rows is a normal, successful no-op in SQL rather than an error, and the poller depends on
-   * that: if this threw, one deleted Organization would take down the rest of the cycle with it.
-   */
-  @Test
-  public void updateSourceStatusAgainstADeletedOrganizationIsANoOp() {
-    var config = new Configuration(
-        List.of("db.password", "db.url", "db.username"),
-        Path.of("src/test/resources/config.properties"),
-        Path.of("src/main/resources/config.properties")
-    );
-
-    var service = new DatabaseService(config);
-    try {
-      var now = Instant.now();
-      service.updateSourceStatus(UUID.randomUUID(), "abc123", now, SourceStatus.BUILD_FAILED, "gone", now);
-    } finally {
-      service.close();
+      database.close();
     }
   }
 }

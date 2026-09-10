@@ -5,6 +5,7 @@
 package dev.theagencyhq.agency.service;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 import module org.lattejava.fusionauth;
 
@@ -19,6 +20,7 @@ import org.lattejava.web.Configuration;
  * resolves to nobody gets a FusionAuth registration whose set-password email doubles as the invitation. Either way
  * a PENDING row is inserted, and accepting is what turns it ACTIVE.
  */
+@Prototype
 public class MembershipService {
   /**
    * The Agency Application in FusionAuth — the same id {@code kickstart.json} provisions as
@@ -39,15 +41,18 @@ public class MembershipService {
    * both environments.
    */
   private final String baseURL;
-  private final DatabaseService database;
   private final FusionAuthClient fusionAuth;
+  private final MemberRepository members;
+  private final OrganizationRepository organizations;
 
-  public MembershipService(Configuration config, DatabaseService database) {
-    this.database = database;
-    this.fusionAuth = new FusionAuthClient(config.get("fusionauth.apiKey"), config.get("fusionauth.baseURL"));
+  public MembershipService(Configuration config, FusionAuthClient fusionAuth, MemberRepository members,
+                           OrganizationRepository organizations) {
+    this.fusionAuth = fusionAuth;
+    this.members = members;
+    this.organizations = organizations;
 
     // A closed set rather than a free-form URL property: the two environments are known, and an unrecognized mode
-    // fails here — at startup, where Services.initialize runs — instead of emailing localhost links from
+    // fails here — at startup, while the scope is being built — instead of emailing localhost links from
     // production.
     var mode = config.get("runtime.mode");
     this.baseURL = switch (mode) {
@@ -66,12 +71,12 @@ public class MembershipService {
    * @param userId         The invitee accepting.
    */
   public void acceptInvitation(UUID organizationId, UUID userId) {
-    var member = database.findMember(organizationId, userId).orElse(null);
+    var member = members.findByOrganizationIdAndUserId(organizationId, userId).orElse(null);
     if (member == null || member.state() != MembershipState.PENDING) {
       return;
     }
 
-    database.updateMemberState(organizationId, userId, MembershipState.ACTIVE, Instant.now());
+    members.update(member.withState(MembershipState.ACTIVE, Instant.now()));
   }
 
   /**
@@ -82,8 +87,9 @@ public class MembershipService {
    * @throws ValidationException if the change is a self-change or would demote the last ACTIVE OWNER.
    */
   public void changeRole(UUID organizationId, UUID targetUserId, Role newRole, User current) {
-    MembershipValidator.validateChangeRole(organizationId, targetUserId, newRole, current, database);
-    database.updateMemberRole(organizationId, targetUserId, newRole);
+    MembershipValidator.validateChangeRole(organizationId, targetUserId, newRole, current, members);
+    members.findByOrganizationIdAndUserId(organizationId, targetUserId)
+           .ifPresent(target -> members.update(target.withRole(newRole)));
   }
 
   /**
@@ -94,25 +100,25 @@ public class MembershipService {
    * @param userId         The invitee declining.
    */
   public void declineInvitation(UUID organizationId, UUID userId) {
-    var member = database.findMember(organizationId, userId).orElse(null);
+    var member = members.findByOrganizationIdAndUserId(organizationId, userId).orElse(null);
     if (member == null || member.state() != MembershipState.PENDING) {
       return;
     }
 
-    database.deleteMember(organizationId, userId);
+    members.delete(organizationId, userId);
   }
 
   /**
-   * Like {@link #findMember}, but with the returned {@link Member#user()} enriched from FusionAuth so callers that
-   * need the email — the role and remove confirmation pages — get one row read plus one FusionAuth lookup
-   * rather than re-fetching every member of the Organization through {@link #listMembers}.
+   * One member, with the returned {@link Member#user()} enriched from FusionAuth so callers that need the email —
+   * the role and remove confirmation pages — get one row read plus one FusionAuth lookup rather than re-fetching
+   * every member of the Organization through {@link #listMembers}.
    *
    * @param organizationId The Organization.
    * @param userId         The member's FusionAuth user UUID.
    * @return The enriched member, or empty if no row exists.
    */
   public Optional<Member> findEnrichedMember(UUID organizationId, UUID userId) {
-    var memberOpt = database.findMember(organizationId, userId);
+    var memberOpt = members.findByOrganizationIdAndUserId(organizationId, userId);
     if (memberOpt.isEmpty()) {
       return memberOpt;
     }
@@ -130,10 +136,6 @@ public class MembershipService {
 
     return Optional.of(new Member(member.organizationId(), user, member.role(), member.state(), member.invitedBy(),
         member.invitedAt(), member.joinedAt()));
-  }
-
-  public Optional<Member> findMember(UUID organizationId, UUID userId) {
-    return database.findMember(organizationId, userId);
   }
 
   /**
@@ -177,11 +179,11 @@ public class MembershipService {
       invitee = UserService.toUser(lookup.user());
 
       // Only possible for an existing user: a brand-new user cannot already hold a row.
-      MembershipValidator.validateNoDuplicateMembership(request.organizationId(), userId, email, database);
+      MembershipValidator.validateNoDuplicateMembership(request.organizationId(), userId, email, members);
 
-      var organizationName = database.findOrganization(request.organizationId())
-                                     .map(Organization::name)
-                                     .orElse("");
+      var organizationName = organizations.findById(request.organizationId())
+                                          .map(Organization::name)
+                                          .orElse("");
       var sendRequest = SendRequest.builder()
                                    .userIds(List.of(userId))
                                    .requestData(Map.of("organizationName", organizationName, "url", baseURL))
@@ -191,7 +193,7 @@ public class MembershipService {
 
     var member = new Member(request.organizationId(), invitee, request.role(), MembershipState.PENDING,
         inviter.userId(), Instant.now(), null);
-    database.insertMember(member);
+    members.create(member);
     return member;
   }
 
@@ -201,8 +203,8 @@ public class MembershipService {
    * @throws ValidationException if leaving would leave the Organization without an ACTIVE OWNER.
    */
   public void leave(UUID organizationId, User current) {
-    MembershipValidator.validateLeave(organizationId, current, database);
-    database.deleteMember(organizationId, current.userId());
+    MembershipValidator.validateLeave(organizationId, current, members);
+    members.delete(organizationId, current.userId());
   }
 
   /**
@@ -214,12 +216,12 @@ public class MembershipService {
    * @return Its members.
    */
   public List<Member> listMembers(UUID organizationId) {
-    var members = database.listMembers(organizationId);
-    if (members.isEmpty()) {
-      return members;
+    var rows = members.findAllByOrganizationId(organizationId);
+    if (rows.isEmpty()) {
+      return rows;
     }
 
-    var ids = members.stream().map(Member::userId).toList();
+    var ids = rows.stream().map(Member::userId).toList();
     var response = fusionAuth.searchUsersByIdsWithId(ids, null, null, null, null, null);
     var byId = new HashMap<UUID, org.lattejava.fusionauth.domain.User>();
     if (response != null) {
@@ -228,8 +230,8 @@ public class MembershipService {
       }
     }
 
-    var enriched = new ArrayList<Member>(members.size());
-    for (var member : members) {
+    var enriched = new ArrayList<Member>(rows.size());
+    for (var member : rows) {
       var fusionAuthUser = byId.get(member.userId());
       User user;
       if (fusionAuthUser == null) {
@@ -254,7 +256,7 @@ public class MembershipService {
    * @throws ValidationException if the removal is a self-removal or would remove the last ACTIVE OWNER.
    */
   public void remove(UUID organizationId, UUID targetUserId, User current) {
-    MembershipValidator.validateRemove(organizationId, targetUserId, current, database);
-    database.deleteMember(organizationId, targetUserId);
+    MembershipValidator.validateRemove(organizationId, targetUserId, current, members);
+    members.delete(organizationId, targetUserId);
   }
 }

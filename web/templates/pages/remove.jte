@@ -1,13 +1,15 @@
 @import dev.theagencyhq.agency.model.MembershipState
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.MemberRemoveView
+@import org.lattejava.http.server.HTTPRequest
 
 @param MemberRemoveView model
+@param HTTPRequest request
 @param User viewer
 
 !{boolean pending = model.member().state() == MembershipState.PENDING;}
 
-@template.layout.main(viewer = viewer, pageTitle = pending ? "Cancel invitation" : "Remove member", content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = pending ? "Cancel invitation" : "Remove member", content = @`
   !{String organizationId = model.organization().id().toString();}
   !{String memberName = model.member().user().email() != null ? model.member().user().email() : model.member().userId().toString();}
 

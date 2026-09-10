@@ -6,7 +6,7 @@
 @param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = model.file().path(), content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = model.file().path(), content = @`
   !{String organizationId = model.organization().id().toString();}
 
   @template.components.page-header(

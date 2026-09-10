@@ -1,6 +1,10 @@
 @import dev.theagencyhq.agency.model.User
+@import java.util.List
+@import org.lattejava.http.server.HTTPRequest
+@import org.lattejava.web.Flash
 
 @param String pageTitle
+@param HTTPRequest request
 @param User viewer
 @param gg.jte.Content content
 
@@ -61,6 +65,17 @@
 </nav>
 
 <main id="main" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+  <%-- What the last request queued for this page: the outcome of a round trip that ended in a redirect, typed by
+       the admonition it is shown as. Only the types the admonition knows are read and the text is escaped like any
+       other, because the flash cookie is the browser's to edit. --%>
+  !{var flash = new Flash(request);}
+  @for(String type : List.of("info", "success", "warning"))
+    @for(String message : flash.messages(type))
+      <div class="mb-6">
+        @template.components.admonition(type = type, content = @`${message}`)
+      </div>
+    @endfor
+  @endfor
   ${content}
 </main>
 

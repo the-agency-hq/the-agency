@@ -1,11 +1,13 @@
 @import dev.theagencyhq.agency.model.Agents
 @import dev.theagencyhq.agency.model.User
 @import dev.theagencyhq.agency.model.view.BriefVersionView
+@import org.lattejava.http.server.HTTPRequest
 
 @param BriefVersionView model
+@param HTTPRequest request
 @param User viewer
 
-@template.layout.main(viewer = viewer, pageTitle = model.organization().name() + " v" + model.version(), content = @`
+@template.layout.main(request = request, viewer = viewer, pageTitle = model.organization().name() + " v" + model.version(), content = @`
   !{String organizationId = model.organization().id().toString();}
   !{String versionBase = "/app/organizations/" + organizationId + "/versions/" + model.version();}
 

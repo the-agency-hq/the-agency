@@ -9,7 +9,7 @@ import module java.base;
 import module org.lattejava.web;
 import module org.testng;
 
-import dev.theagencyhq.agency.tests.github.FakeGitHubClient;
+import dev.theagencyhq.agency.tests.source.FakeRepositoryClient;
 
 import static org.testng.Assert.*;
 
@@ -30,7 +30,7 @@ public class PipelineIntegrationTest extends BaseTest {
   private String lastChecksum;
   private int lastVersion;
   private Organization organization;
-  private FakeGitHubClient.Repository repository;
+  private FakeRepositoryClient.Repository repository;
 
   // Deletes every Organization this class registered (immediately tracked in organizationIds as each is created),
   // so the one agency_test database every other test class shares is left exactly as this class found it.
@@ -38,8 +38,8 @@ public class PipelineIntegrationTest extends BaseTest {
   // must still trigger this cleanup. Deleting an id scenario 7 already deleted itself is a harmless no-op.
   @AfterClass(alwaysRun = true)
   public void afterClass() {
-    if (db != null) {
-      organizationIds.forEach(db::deleteOrganization);
+    if (organizations != null) {
+      organizationIds.forEach(organizations::delete);
     }
   }
 
@@ -56,13 +56,13 @@ public class PipelineIntegrationTest extends BaseTest {
   }
 
   private void buildFailureLeavesThePreviousVersionServing() throws Exception {
-    var before = db.findLatestBrief(organization.id()).orElseThrow();
+    var before = briefs.findLatestByOrganizationId(organization.id()).orElseThrow();
 
     repository.removeFile("the-agency-hq-settings.json");
 
     assertEquals(runCycle(organization.id()), SourceStatus.BUILD_FAILED);
 
-    var after = db.findLatestBrief(organization.id()).orElseThrow();
+    var after = briefs.findLatestByOrganizationId(organization.id()).orElseThrow();
     assertEquals(after.version(), before.version());
     assertEquals(after.checksum(), before.checksum());
 
@@ -77,14 +77,14 @@ public class PipelineIntegrationTest extends BaseTest {
     repository.putFile("rules/rule1.md", "rule one, edited\n");
 
     assertEquals(runCycle(organization.id()), SourceStatus.OK);
-    assertEquals(db.findLatestBrief(organization.id()).orElseThrow().version().intValue(), 2);
+    assertEquals(briefs.findLatestByOrganizationId(organization.id()).orElseThrow().version().intValue(), 2);
   }
 
   private void corruptChecksumForcesAResend() throws Exception {
     briefing(currentVersionsBody(organization.id(), lastVersion, "not-" + lastChecksum))
         .assertStatus(200)
         .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON,
-            briefingResponse(List.of(organization), List.of(db.findLatestBrief(organization.id()).orElseThrow()))));
+            briefingResponse(List.of(organization), List.of(briefs.findLatestByOrganizationId(organization.id()).orElseThrow()))));
   }
 
   /**
@@ -114,11 +114,11 @@ public class PipelineIntegrationTest extends BaseTest {
     organization = organizationService.create("pipeline-" + UUID.randomUUID(), testUser);
     organizationIds.add(organization.id());
     linkGitHub(organization.id());
-    connect(organization.id(), "theagencyhq", "pipeline-briefs");
+    connect(organization.id(), "theagencyhq/pipeline-briefs");
 
     assertEquals(runCycle(organization.id()), SourceStatus.OK);
 
-    var brief = db.findLatestBrief(organization.id()).orElseThrow();
+    var brief = briefs.findLatestByOrganizationId(organization.id()).orElseThrow();
     assertEquals(brief.version().intValue(), 1);
 
     // One skill, one rule and two escape-hatch files through every Translator. The skill is copied three times
@@ -147,7 +147,7 @@ public class PipelineIntegrationTest extends BaseTest {
 
     // The commit is GitHub's, carried onto the Brief as its provenance, and it is what the next cycle compares
     // against to decide whether there is anything to do at all.
-    assertEquals(brief.sourceCommit(), db.findSource(organization.id()).orElseThrow().lastBuiltCommit());
+    assertEquals(brief.sourceCommit(), sources.findByOrganizationId(organization.id()).orElseThrow().lastBuiltCommit());
   }
 
   private String currentVersionsBody(UUID organizationId, int version, String checksum) {
@@ -164,13 +164,13 @@ public class PipelineIntegrationTest extends BaseTest {
     var throwaway = organizationService.create("pipeline-throwaway-" + UUID.randomUUID(), testUser);
     organizationIds.add(throwaway.id());
     linkGitHub(throwaway.id());
-    connect(throwaway.id(), "theagencyhq", "throwaway-briefs");
+    connect(throwaway.id(), "theagencyhq/throwaway-briefs");
 
     assertEquals(runCycle(throwaway.id()), SourceStatus.OK);
-    var brief = db.findLatestBrief(throwaway.id()).orElseThrow();
+    var brief = briefs.findLatestByOrganizationId(throwaway.id()).orElseThrow();
 
     organizationService.delete(throwaway.id());
-    assertTrue(db.findOrganization(throwaway.id()).isEmpty());
+    assertTrue(organizations.findById(throwaway.id()).isEmpty());
 
     // The Handler still asserts the exact version/checksum it held before the Organization vanished. The set
     // comparison in BriefingService.decide is what turns that into a 200 instead of a 304 -- without it, a deleted
@@ -181,11 +181,11 @@ public class PipelineIntegrationTest extends BaseTest {
         // Location down. Comparing the whole response asserts both halves at once: it is gone from
         // organizationIds, and no Brief of its comes along either.
         .assertBodyAs(json, b -> b.equalTo(BriefingResponse::fromJSON,
-            briefingResponse(List.of(organization), List.of(db.findLatestBrief(organization.id()).orElseThrow()))));
+            briefingResponse(List.of(organization), List.of(briefs.findLatestByOrganizationId(organization.id()).orElseThrow()))));
   }
 
   private void handlerColdStoreReceivesEveryBrief() throws Exception {
-    var brief = db.findLatestBrief(organization.id()).orElseThrow();
+    var brief = briefs.findLatestByOrganizationId(organization.id()).orElseThrow();
     lastVersion = brief.version();
     lastChecksum = brief.checksum();
 
@@ -205,6 +205,6 @@ public class PipelineIntegrationTest extends BaseTest {
     repository.putFile("README.md", "unrelated\n");
 
     assertEquals(runCycle(organization.id()), SourceStatus.UNCHANGED);
-    assertEquals(db.findLatestBrief(organization.id()).orElseThrow().version().intValue(), 2);
+    assertEquals(briefs.findLatestByOrganizationId(organization.id()).orElseThrow().version().intValue(), 2);
   }
 }

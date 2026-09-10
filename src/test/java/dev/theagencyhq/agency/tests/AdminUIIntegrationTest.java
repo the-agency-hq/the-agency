@@ -10,7 +10,7 @@ import module org.lattejava.web;
 import module org.testng;
 
 import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.assertFalse;
 
 /**
  * Drives the admin UI entirely through HTTP, posting forms rather than calling {@code OrganizationService} or
@@ -61,8 +61,9 @@ public class AdminUIIntegrationTest extends BaseTest {
 
   /**
    * A connection that dies after registration — revoked on GitHub's side — brings the warning back to the
-   * Organization's page once a poll has discovered it, because reconnecting is the same operation wherever the
-   * authorization went.
+   * Organization's page and its Sources page once a poll has discovered it, because reconnecting is the same
+   * operation wherever the authorization went. The repository it was building from is still shown on the Sources
+   * page: only the connection died.
    */
   @Test
   public void aRevokedConnectionBringsTheWarningBack() {
@@ -75,28 +76,86 @@ public class AdminUIIntegrationTest extends BaseTest {
 
     test.get("/app/organizations/" + organizationId)
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("not connected to GitHub")
-                                    .contains("/app/oauth/github/start?organizationId=" + organizationId));
+        .assertBodyAs(string, b -> b.contains("not connected to a Brief source")
+                                    .contains("/app/organizations/" + organizationId + "/sources"));
+    test.get("/app/organizations/" + organizationId + "/sources")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("not connected to a Brief source")
+                                    .contains("/app/oauth/github/start?organizationId=" + organizationId)
+                                    .doesNotContain("Change repository"));
   }
 
   /**
-   * Before any GitHub authorization exists, the Organization's own page carries the warning and the button that
-   * starts the authorization — it is where the create form lands the operator — and the repository picker is
-   * unreachable: it would have nothing to populate itself from, so it sends the operator back to the page that
-   * offers the connection.
+   * Before any GitHub authorization exists, the Organization's own page carries the warning and points at the
+   * Sources page — it is where the create form lands the operator — the Sources page carries the button that
+   * starts the authorization, and the repository picker is unreachable: it would have nothing to populate itself
+   * from, so it sends the operator back to the page that offers the connection.
    */
   @Test
-  public void anUnconnectedOrganizationWarnsOnItsPageAndThePickerRedirectsThere() {
+  public void anUnconnectedOrganizationWarnsOnItsPageAndThePickerRedirectsToSources() {
     var organizationId = createOrganization("admin-ui-unconnected-" + UUID.randomUUID());
 
     test.get("/app/organizations/" + organizationId)
         .assertStatus(200)
-        .assertBodyAs(string, b -> b.contains("not connected to GitHub")
-                                    .contains("/app/oauth/github/start?organizationId=" + organizationId)
+        .assertBodyAs(string, b -> b.contains("not connected to a Brief source")
+                                    .contains("/app/organizations/" + organizationId + "/sources")
+                                    .doesNotContain("/app/oauth/github/start")
                                     .doesNotContain("Use this repository"));
 
-    test.get("/app/organizations/" + organizationId + "/connect")
-        .assertRedirect(303, "/app/organizations/" + organizationId);
+    test.get("/app/organizations/" + organizationId + "/sources")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("not connected to a Brief source")
+                                    .contains("Not connected.")
+                                    .contains("/app/oauth/github/start?organizationId=" + organizationId)
+                                    .doesNotContain("Change repository")
+                                    .doesNotContain("Connect a repository"));
+
+    test.get("/app/organizations/" + organizationId + "/sources/github")
+        .assertRedirect(303, "/app/organizations/" + organizationId + "/sources");
+  }
+
+  /**
+   * The Sources page for an Organization that has connected GitHub and picked a repository: the repository, the
+   * account, and the button that swaps the repository — which only a GitHub source renders.
+   */
+  @Test
+  public void sourcesShowsTheRegisteredRepositoryAndOffersToChangeIt() {
+    github.add("acme", "briefs").putFile("rules/a.md", "first\n");
+    var organizationId = createConnectedOrganization("admin-ui-sources-" + UUID.randomUUID());
+
+    test.get("/app/organizations/" + organizationId + "/sources")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("Connected as")
+                                    .contains("acme/briefs")
+                                    .contains("https://github.com/acme/briefs")
+                                    .contains("Change repository")
+                                    .contains("/app/organizations/" + organizationId + "/sources/github")
+                                    .doesNotContain("not connected to a Brief source"));
+  }
+
+  /**
+   * Between authorizing GitHub and picking a repository, the Organization's page says nothing is being built and
+   * the Sources page offers the picker under "Connect a repository" rather than "Change repository" — there is
+   * nothing to change yet.
+   */
+  @Test
+  public void aConnectedButUnregisteredOrganizationIsOfferedThePicker() {
+    var organizationId = createOrganization("admin-ui-unregistered-" + UUID.randomUUID());
+    linkGitHub(organizationId);
+
+    test.get("/app/organizations/" + organizationId)
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("No source is registered")
+                                    .contains("/app/organizations/" + organizationId + "/sources")
+                                    .doesNotContain("not connected to a Brief source")
+                                    .doesNotContain("Rebuild now"));
+
+    test.get("/app/organizations/" + organizationId + "/sources")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("No repository chosen yet")
+                                    .contains("Connect a repository")
+                                    .doesNotContain("Change repository")
+                                    .doesNotContain("not connected to a Brief source"));
   }
 
   /**
@@ -112,7 +171,7 @@ public class AdminUIIntegrationTest extends BaseTest {
     var organizationId = createOrganization("admin-ui-picker-" + UUID.randomUUID());
     linkGitHub(organizationId);
 
-    test.get("/app/organizations/" + organizationId + "/connect")
+    test.get("/app/organizations/" + organizationId + "/sources/github")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("value=\"acme/briefs\" data-branch=\"trunk\"")
                                     .contains("value=\"acme/other\" data-branch=\"main\"")
@@ -129,11 +188,28 @@ public class AdminUIIntegrationTest extends BaseTest {
     var organizationId = createOrganization("admin-ui-noinstall-" + UUID.randomUUID());
     linkGitHub(organizationId);
 
-    test.get("/app/organizations/" + organizationId + "/connect")
+    test.get("/app/organizations/" + organizationId + "/sources/github")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("Install the GitHub app")
                                     .contains("/app/oauth/github/install?organizationId=" + organizationId)
                                     .doesNotContain("Use this repository"));
+  }
+
+  /**
+   * The Sources page offers one card per kind this server is configured for -- the test configuration carries
+   * credentials for both -- each with its own connect link, and nothing else says there is nothing to connect to.
+   */
+  @Test
+  public void sourcesOffersEveryConfiguredKind() {
+    var organizationId = createOrganization("admin-ui-kinds-" + UUID.randomUUID());
+
+    test.get("/app/organizations/" + organizationId + "/sources")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("Connect to GitHub")
+                                    .contains("/app/oauth/github/start?organizationId=" + organizationId)
+                                    .contains("Connect to GitLab")
+                                    .contains("/app/oauth/gitlab/start?organizationId=" + organizationId)
+                                    .doesNotContain("No Brief sources are configured"));
   }
 
   @Test
@@ -158,7 +234,7 @@ public class AdminUIIntegrationTest extends BaseTest {
                                     .contains("https://github.com/acme/briefs")
                                     // A healthy connection must not warn -- the warning is the disconnected
                                     // state's, and showing it here would train operators to ignore it.
-                                    .doesNotContain("not connected to GitHub"));
+                                    .doesNotContain("not connected to a Brief source"));
 
     test.get("/app/organizations/" + organizationId + "/versions/1")
         .assertStatus(200)
@@ -210,7 +286,7 @@ public class AdminUIIntegrationTest extends BaseTest {
 
     rebuild(organizationId);
 
-    // The version cell is fed by latestBriefVersions(), a different SQL statement from the one the Briefing API
+    // The version cell is fed by findLatestVersions(), a different SQL statement from the one the Briefing API
     // uses. Asserting the cell and the repository rather than their markup: every element on this page carries
     // Tailwind classes, so matching a bare tag would break on any styling change rather than on a behaviour change.
     test.get("/app/organizations/")
@@ -234,7 +310,9 @@ public class AdminUIIntegrationTest extends BaseTest {
   public void malformedOrganizationIdRedirectsToTheListing() {
     test.get("/app/organizations/not-a-uuid")
         .assertRedirect(303, "/app/organizations/");
-    test.get("/app/organizations/not-a-uuid/connect")
+    test.get("/app/organizations/not-a-uuid/sources")
+        .assertRedirect(303, "/app/organizations/");
+    test.get("/app/organizations/not-a-uuid/sources/github")
         .assertRedirect(303, "/app/organizations/");
     test.post("/app/organizations/not-a-uuid/rebuild")
         .assertRedirect(303, "/app/organizations/");
@@ -297,12 +375,13 @@ public class AdminUIIntegrationTest extends BaseTest {
 
     test.withFormField("repository", "acme/app")
         .withFormField("branch", "main")
-        .post("/app/organizations/" + organizationId + "/connect")
+        .post("/app/organizations/" + organizationId + "/sources/github")
         .assertStatus(200)
         .assertBodyAs(string, b -> b.contains("is not a Brief source repository"))
         .reset(ResetItem.Request);
 
-    assertTrue(db.findSource(organizationId).isEmpty());
+    // The source row exists -- linking created it -- but nothing was registered on it.
+    assertFalse(sources.findByOrganizationId(organizationId).orElseThrow().registered());
   }
 
   @Test
@@ -313,7 +392,7 @@ public class AdminUIIntegrationTest extends BaseTest {
         .assertBodyAs(string, b -> b.contains("A name is required."))
         .reset(ResetItem.Request);
 
-    assertEquals(db.listOrganizations().size(), 0);
+    assertEquals(organizations.findAll().size(), 0);
   }
 
   /**
@@ -348,7 +427,7 @@ public class AdminUIIntegrationTest extends BaseTest {
 
     test.withFormField("repository", "acme/briefs")
         .withFormField("branch", "main")
-        .post("/app/organizations/" + organizationId + "/connect")
+        .post("/app/organizations/" + organizationId + "/sources/github")
         .assertRedirect(303, "/app/organizations/" + organizationId)
         .reset(ResetItem.Request);
 

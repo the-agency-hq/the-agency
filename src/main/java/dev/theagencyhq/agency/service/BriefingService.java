@@ -5,17 +5,21 @@
 package dev.theagencyhq.agency.service;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 
 /**
  * Decides what a Handler is told. A pure function over who is asking, what their Handler asserted, and what the
  * database holds — no other I/O, no state — so the whole §10.2 matrix is testable without a socket.
  */
+@Prototype
 public class BriefingService {
-  private final DatabaseService databaseService;
+  private final BriefRepository briefs;
+  private final OrganizationRepository organizations;
 
-  public BriefingService(DatabaseService databaseService) {
-    this.databaseService = databaseService;
+  public BriefingService(BriefRepository briefs, OrganizationRepository organizations) {
+    this.briefs = briefs;
+    this.organizations = organizations;
   }
 
   /**
@@ -25,15 +29,15 @@ public class BriefingService {
    * @return The outcome.
    */
   public BriefingOutcome runBriefing(BriefingRequest request, User user) {
-    var organizations = databaseService.listOrganizationsForUser(user.userId(), MembershipState.ACTIVE);
-    var latestBriefs = databaseService.latestBriefs();
+    var entitled = organizations.findAllByMember(user.userId(), MembershipState.ACTIVE);
+    var latestBriefs = briefs.findLatest();
 
     // One canonical ordering for both output arrays, keyed on the id's String form. The wire carries strings and the
     // Handler compares strings, so that is the form the ordering has to agree with. Sorting once and deriving
     // `deliverable` from the already-sorted list is what keeps them identical: sorting the same ids by UUID's own
     // natural order (signed mostSigBits) as well would give two orderings that disagree whenever a leading hex
     // nibble is >= 8, which is a trap for anyone who later pairs the arrays up.
-    var entitledIds = organizations.stream().map(Organization::id).sorted(Comparator.comparing(UUID::toString)).toList();
+    var entitledIds = entitled.stream().map(Organization::id).sorted(Comparator.comparing(UUID::toString)).toList();
 
     // Deliverable = entitled AND has at least one built Brief. The distinction matters twice below. A filter of an
     // ordered list, so it inherits the ordering above rather than establishing a second one.

@@ -76,7 +76,8 @@ public class AdminUIAuthenticationIntegrationTest extends BaseTest {
   public void everyAdminPathIsGated() {
     for (var path : List.of("/app/organizations/", "/app/organizations/new",
         "/app/organizations/" + UUID.randomUUID(),
-        "/app/organizations/" + UUID.randomUUID() + "/connect",
+        "/app/organizations/" + UUID.randomUUID() + "/sources",
+        "/app/organizations/" + UUID.randomUUID() + "/sources/github",
         "/app/organizations/" + UUID.randomUUID() + "/versions/1",
         // The GitHub handshake is inside the gate for a reason of its own: the callback identifies the connecting
         // operator from the session, so an ungated callback would let anyone reaching the URL attach a GitHub

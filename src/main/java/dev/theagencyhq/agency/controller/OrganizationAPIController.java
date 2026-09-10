@@ -5,6 +5,7 @@
 package dev.theagencyhq.agency.controller;
 
 import module dev.theagencyhq.agency;
+import module io.avaje.inject;
 import module java.base;
 import module org.lattejava.http;
 import module org.lattejava.web;
@@ -21,18 +22,19 @@ import dev.theagencyhq.agency.model.api.internal.*;
  * the entitlement the 2026-07-30 design (§10.4) promised — computed the same way {@code BriefingService} computes
  * it. A PENDING invitation entitles a Handler to nothing, because nobody has accepted it yet.
  *
- * <p>The envelope carries the Organization records themselves, serialized through the generated codec.
- * {@code gitHubConnection} never serializes ({@code @JSONField(ignore = true)} on the record), so the credential
- * columns cannot leak through this endpoint however the model grows.
+ * <p>The envelope carries the Organization records themselves, serialized through the generated codec. An
+ * Organization carries no credential — its source, and the GitHub authorization inside it, is a separate row that
+ * nothing on the wire embeds — so no credential can leak through this endpoint however the model grows.
  */
+@Prototype
 public class OrganizationAPIController {
   private static final System.Logger logger = System.getLogger(OrganizationAPIController.class.getName());
-  private final DatabaseService database;
   private final OIDC<User> oidc;
+  private final OrganizationRepository organizations;
 
-  public OrganizationAPIController(OIDC<User> oidc, DatabaseService database) {
-    this.database = database;
+  public OrganizationAPIController(@Named(Wiring.API) OIDC<User> oidc, OrganizationRepository organizations) {
     this.oidc = oidc;
+    this.organizations = organizations;
   }
 
   public void list(HTTPRequest req, HTTPResponse res) throws IOException {
@@ -40,8 +42,8 @@ public class OrganizationAPIController {
     // the memberships the list is narrowed by are theirs.
     var user = oidc.user();
 
-    var organizations = database.listOrganizationsForUser(user.userId(), MembershipState.ACTIVE);
-    var bytes = OrganizationsResponseJSON.toJSONBytes(new OrganizationsResponse(organizations));
+    var entitled = organizations.findAllByMember(user.userId(), MembershipState.ACTIVE);
+    var bytes = OrganizationsResponseJSON.toJSONBytes(new OrganizationsResponse(entitled));
     res.setStatus(200);
     res.setContentType("application/json");
     res.setContentLength(bytes.length);
@@ -50,6 +52,6 @@ public class OrganizationAPIController {
     // The user id, not the email, for the same reasons BriefingController logs it: it is stable, it is
     // the less revealing claim, and it is what entitlements will key on. The access token is never logged.
     logger.log(System.Logger.Level.DEBUG, "Organizations response for user [{0}] with [{1}] Organizations",
-        user.userId(), organizations.size());
+        user.userId(), entitled.size());
   }
 }

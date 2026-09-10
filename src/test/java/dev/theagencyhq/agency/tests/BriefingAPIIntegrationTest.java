@@ -81,14 +81,14 @@ public class BriefingAPIIntegrationTest extends BaseTest {
    */
   @Test
   public void anOrganizationTheCallerDoesNotBelongToIsNotEntitled() throws Exception {
-    var foreign = new Organization(UUID.randomUUID(), "briefing-foreign-" + UUID.randomUUID(), null, null, TEST_INSTANT,
+    var foreign = new Organization(UUID.randomUUID(), "briefing-foreign-" + UUID.randomUUID(), null, TEST_INSTANT,
         TEST_INSTANT);
-    db.insertOrganization(foreign);
+    organizations.create(foreign);
     insertBrief(foreign, "sum-foreign", briefFile("agents.md", "foreign\n"));
 
-    var invited = new Organization(UUID.randomUUID(), "briefing-invited-" + UUID.randomUUID(), null, null, TEST_INSTANT,
+    var invited = new Organization(UUID.randomUUID(), "briefing-invited-" + UUID.randomUUID(), null, TEST_INSTANT,
         TEST_INSTANT);
-    db.insertOrganization(invited);
+    organizations.create(invited);
     insertMember(invited, testUser, Role.CONTRIBUTOR, MembershipState.PENDING);
     insertBrief(invited, "sum-invited", briefFile("agents.md", "invited\n"));
 
@@ -187,7 +187,7 @@ public class BriefingAPIIntegrationTest extends BaseTest {
   @BeforeMethod
   public void seed() {
     organization = insertOrganization();
-    // The stored Brief is what the API emits: DatabaseService attaches the row's version on the way back out, which
+    // The stored Brief is what the API emits: BriefRepository attaches the row's version on the way back out, which
     // is why the golden files can pin "version": 1 for a document that never carried one.
     insertBrief(organization, "sum-1");
   }
@@ -200,7 +200,7 @@ public class BriefingAPIIntegrationTest extends BaseTest {
    * Types — without being re-derived from the records the test inserted.
    *
    * <p>The version and provenance are columns rather than members of the stored document, so this also proves
-   * {@code DatabaseService} reattaches them on the way out.
+   * {@code BriefRepository} reattaches them on the way out.
    */
   @Test
   public void storedBriefSurvivesTheRoundTrip() throws Exception {

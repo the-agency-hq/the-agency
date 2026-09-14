@@ -9,6 +9,8 @@ import module java.base;
 import module org.lattejava.web;
 import module org.testng;
 
+import dev.theagencyhq.agency.Main;
+
 import static org.testng.Assert.*;
 
 /**
@@ -283,6 +285,83 @@ public class OrganizationIntegrationTest extends BaseTest {
     assertNull(member.invitedBy());
     assertNull(member.invitedAt());
     assertNotNull(member.joinedAt());
+  }
+
+  /**
+   * The confirmation is the name: trimmed, because a name pasted from the page can carry whitespace nobody typed,
+   * but not case-folded and not a prefix. A refusal re-renders the page with the reason and what was typed, and
+   * deletes nothing.
+   */
+  @Test
+  public void deleteIsRefusedUntilTheNameMatchesExactly() throws Exception {
+    var name = "org-delete-mismatch-" + UUID.randomUUID();
+    var organizationId = createOrganization(name);
+    var path = "/app/organizations/" + organizationId + "/delete";
+
+    test.post(path)
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("does not match"))
+        .reset(ResetItem.Request);
+    for (var typed : List.of(name.toUpperCase(Locale.ROOT), name.substring(0, name.length() - 1), name + "x")) {
+      test.withFormField("name", typed)
+          .post(path)
+          .assertStatus(200)
+          .assertBodyAs(string, b -> b.contains("does not match").contains("value=\"" + typed + "\""))
+          .reset(ResetItem.Request);
+    }
+    assertTrue(organizations.findById(organizationId).isPresent());
+
+    test.withFormField("name", "  " + name + " ")
+        .post(path)
+        .assertRedirect(303, "/app/organizations/")
+        .reset(ResetItem.Request);
+    assertTrue(organizations.findById(organizationId).isEmpty());
+  }
+
+  /**
+   * Deleting takes the whole Organization with it — the source and its credential, every Brief version, every
+   * membership — by the schema's cascades, and the listing the operator lands on says so. The page it is confirmed
+   * from says what it is about to take.
+   */
+  @Test
+  public void deleteRemovesTheOrganizationAndEverythingUnderIt() throws Exception {
+    github.add("acme", "briefs");
+    var name = "org-delete-" + UUID.randomUUID();
+    var organizationId = createOrganization(name);
+    linkGitHub(organizationId);
+    postConnect(organizationId, "acme/briefs", "main")
+        .assertRedirect(303, "/app/organizations/" + organizationId)
+        .reset(ResetItem.Request);
+    rebuild(organizationId);
+    insertMember(organizations.findById(organizationId).orElseThrow(), ordinaryUser, Role.CONTRIBUTOR,
+        MembershipState.ACTIVE);
+    assertEquals(briefs.findAllByOrganizationId(organizationId).size(), 1);
+
+    test.get("/app/organizations/" + organizationId)
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("/app/organizations/" + organizationId + "/delete"));
+    test.get("/app/organizations/" + organizationId + "/delete")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains("Delete Organization")
+                                    .contains("acme/briefs")
+                                    .contains("1 Brief version,")
+                                    .contains("2 memberships,"));
+
+    test.withFormField("name", name)
+        .post("/app/organizations/" + organizationId + "/delete")
+        .assertRedirect(303, "/app/organizations/")
+        .reset(ResetItem.Request);
+
+    assertTrue(organizations.findById(organizationId).isEmpty());
+    assertTrue(sources.findByOrganizationId(organizationId).isEmpty());
+    assertTrue(briefs.findAllByOrganizationId(organizationId).isEmpty());
+    assertTrue(members.findAllByOrganizationId(organizationId).isEmpty());
+
+    // The notice, read from the same file the handler queues it from, for the path that queued it.
+    var messages = new Messages(Main.BASE_DIR, "/app/organizations/" + organizationId + "/delete");
+    test.get("/app/organizations/")
+        .assertStatus(200)
+        .assertBodyAs(string, b -> b.contains(messages.get("deleted", name)));
   }
 
   // Every route this class posts to is behind the gate, so the session is established once here rather than at the

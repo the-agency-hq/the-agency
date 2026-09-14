@@ -45,6 +45,9 @@
           @if(model.activeMember())
             <a href="/app/organizations/${organizationId}/members/leave" class="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors px-1 py-2">Leave</a>
           @endif
+          @if(model.canManage())
+            <a href="/app/organizations/${organizationId}/delete" class="text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors px-1 py-2">Delete</a>
+          @endif
         </div>`)
 
   @if(model.invited())

@@ -42,8 +42,8 @@ public class MembershipIntegrationTest extends BaseTest {
     ssrOIDC.login(ORDINARY_EMAIL, TEST_PASSWORD);
     test.get("/app/organizations/" + organization.id())
         .assertStatus(200)
-        // The management actions are not offered to a Contributor, and Leave is.
-        .assertBodyAs(string, b -> b.doesNotContain("/members/\"").doesNotContain("/sources\"")
+        // The management actions, Delete among them, are not offered to a Contributor, and Leave is.
+        .assertBodyAs(string, b -> b.doesNotContain("/members/\"").doesNotContain("/sources\"").doesNotContain("/delete\"")
                                     .contains("/members/leave"));
 
     test.post("/app/organizations/" + organization.id() + "/rebuild")
@@ -52,6 +52,7 @@ public class MembershipIntegrationTest extends BaseTest {
     for (var path : List.of(
         "/app/organizations/" + organization.id() + "/sources",
         "/app/organizations/" + organization.id() + "/sources/github",
+        "/app/organizations/" + organization.id() + "/delete",
         "/app/organizations/" + organization.id() + "/members/",
         "/app/organizations/" + organization.id() + "/members/invite",
         "/app/organizations/" + organization.id() + "/members/" + testUser.userId() + "/role",
@@ -60,6 +61,13 @@ public class MembershipIntegrationTest extends BaseTest {
       test.get(path)
           .assertRedirect(303, "/app/organizations/");
     }
+
+    // The same gate on the POST, so a Contributor who knows the name deletes nothing.
+    test.withFormField("name", organization.name())
+        .post("/app/organizations/" + organization.id() + "/delete")
+        .assertRedirect(303, "/app/organizations/")
+        .reset(ResetItem.Request);
+    assertTrue(organizations.findById(organization.id()).isPresent());
   }
 
   /**

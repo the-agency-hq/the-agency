@@ -8,9 +8,9 @@ import module dev.theagencyhq.agency;
 import module java.base;
 
 /**
- * Validates a new Organization's name. The name is display text and carries no character-set restriction: nothing
- * derives an identifier, path or URL from it, so there is nothing for a restricted alphabet to protect. It has to be
- * present, has to fit {@link #NAME_MAX_LENGTH}, and has to be unique.
+ * Validates a new Organization's name, and the typed name that confirms deleting one. The name is display text and
+ * carries no character-set restriction: nothing derives an identifier, path or URL from it, so there is nothing for a
+ * restricted alphabet to protect. It has to be present, has to fit {@link #NAME_MAX_LENGTH}, and has to be unique.
  *
  * <p>The source is not validated here and cannot be: an Organization is named before it is connected to GitHub, and
  * until that connection exists the Agency has no credential with which to ask whether any particular repository is a
@@ -39,6 +39,21 @@ public final class OrganizationValidator {
 
     if (!errors.isEmpty()) {
       throw new ValidationException(errors);
+    }
+  }
+
+  /**
+   * The delete confirmation: what the operator typed has to be the Organization's name. Trimmed, but not case-folded
+   * and not a prefix — typing the name is how the operator proves they read which Organization this is.
+   *
+   * @param organization The Organization being deleted.
+   * @param confirmation What the operator typed, or {@code null} if nothing arrived.
+   * @throws ValidationException if the confirmation is not the Organization's name.
+   */
+  public static void validateDelete(Organization organization, String confirmation) {
+    var typed = confirmation == null ? "" : confirmation.trim();
+    if (!typed.equals(organization.name())) {
+      throw new ValidationException(List.of("The name typed does not match [" + organization.name() + "]."));
     }
   }
 }

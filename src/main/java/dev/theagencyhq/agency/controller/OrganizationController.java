@@ -13,8 +13,8 @@ import module org.lattejava.web;
 import dev.theagencyhq.agency.model.Member;
 
 /**
- * The admin UI for Organizations: create one, choose its Agents, see its Brief source and version history, trigger
- * a rebuild, and inspect exactly what a Brief version contains.
+ * The admin UI for Organizations: create one, delete one, choose its Agents, see its Brief source and version
+ * history, trigger a rebuild, and inspect exactly what a Brief version contains.
  *
  * <p>The Sources page is here too — it lists every kind of source this server offers, warns when the connection is
  * missing or dead, and is where the OAuth callbacks land — but the kinds' own routes belong to
@@ -99,6 +99,26 @@ public class OrganizationController {
     } catch (ValidationException e) {
       renderForm(req, res, e.errors(), name == null ? "" : name);
     }
+  }
+
+  /**
+   * Deletes the Organization once the typed name matches. The notice is queued for the listing, the only page left
+   * to land on; a mismatch re-renders the page with what was typed, so the reason shows next to what produced it.
+   */
+  public void delete(HTTPRequest req, HTTPResponse res) throws IOException {
+    var organization = organization(req);
+    var confirmation = req.getParameter("name");
+    try {
+      organizationService.delete(organization, confirmation);
+      new Flash(req).addMessage("success", new Messages(req).get("deleted", organization.name()));
+      res.sendRedirect("/app/organizations/", 303);
+    } catch (ValidationException e) {
+      renderDeleteForm(req, res, organization, confirmation == null ? "" : confirmation, e.errors());
+    }
+  }
+
+  public void deleteForm(HTTPRequest req, HTTPResponse res) throws IOException {
+    renderDeleteForm(req, res, organization(req), "", List.of());
   }
 
   public void detail(HTTPRequest req, HTTPResponse res) throws IOException {
@@ -287,6 +307,17 @@ public class OrganizationController {
    */
   private void render(String template, HTTPRequest req, HTTPResponse res, Object model) throws IOException {
     templates.html(template, req, res, Map.of("model", model, "viewer", oidc.user()));
+  }
+
+  private void renderDeleteForm(HTTPRequest req, HTTPResponse res, Organization organization, String confirmation,
+                                List<String> errors) throws IOException {
+    var source = sources.findByOrganizationId(organization.id()).orElse(null);
+    // Versions are numbered from one and never pruned, so the latest number is the count: one document read rather
+    // than the whole history.
+    var versions = briefs.findLatestByOrganizationId(organization.id()).map(Brief::version).orElse(0);
+    var memberCount = members.findAllByOrganizationId(organization.id()).size();
+    render("pages/delete.jte", req, res,
+        new OrganizationDeleteView(organization, source, versions, memberCount, confirmation, errors));
   }
 
   private void renderForm(HTTPRequest req, HTTPResponse res, List<String> errors, String name) throws IOException {

@@ -68,8 +68,9 @@ authenticated by construction. The server binds loopback in development (there i
 OWNER/CONTRIBUTOR, state ACTIVE/PENDING) gates everything: `OrganizationSecurity` on the `/app/organizations`
 prefix requires a membership row for any `{organizationId}` route (denials silently 303 to the listing), per-route
 `HasRole(OWNER)` gates the management pages, and both APIs serve only the caller's ACTIVE memberships. Creating an
-Organization seats the creator as ACTIVE OWNER. Invitations go through FusionAuth (`MembershipService`): known
-emails get the invitation email template, unknown ones get a FusionAuth registration whose set-password email is
+Organization seats the creator as ACTIVE OWNER; deleting one is Owner-only behind a typed-name confirmation
+(`OrganizationService.delete`), one `DELETE` whose cascades take the source, every Brief, and every membership.
+Invitations go through FusionAuth (`MembershipService`): known emails get the invitation email template, unknown ones get a FusionAuth registration whose set-password email is
 the invitation — templates live in `src/main/fusionauth/kickstart/emails/`, and Mailcatcher (in the compose stack,
 http://localhost:1080) receives them locally.
 

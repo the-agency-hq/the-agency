@@ -1468,6 +1468,9 @@
   .focus\:border-accent-500:focus {
     border-color: var(--color-accent-500);
   }
+  .focus\:border-red-500:focus {
+    border-color: var(--color-red-500);
+  }
   .focus\:bg-accent-800:focus {
     background-color: var(--color-accent-800);
   }
@@ -1491,6 +1494,12 @@
     --tw-ring-color: color-mix(in srgb, #06b6d4 30%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       --tw-ring-color: color-mix(in oklab, var(--color-accent-500) 30%, transparent);
+    }
+  }
+  .focus\:ring-red-500\/30:focus {
+    --tw-ring-color: color-mix(in srgb, oklch(63.7% 0.237 25.331) 30%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      --tw-ring-color: color-mix(in oklab, var(--color-red-500) 30%, transparent);
     }
   }
   .focus\:ring-offset-2:focus {
@@ -1545,6 +1554,9 @@
   .disabled\:text-slate-400:disabled {
     color: var(--color-slate-400);
   }
+  .disabled\:opacity-50:disabled {
+    opacity: 50%;
+  }
   .disabled\:outline-slate-200:disabled {
     outline-color: var(--color-slate-200);
   }
@@ -1554,6 +1566,11 @@
   }
   .disabled\:checked\:bg-slate-300:disabled:checked {
     background-color: var(--color-slate-300);
+  }
+  @media (hover: hover) {
+    .disabled\:hover\:bg-red-700:disabled:hover {
+      background-color: var(--color-red-700);
+    }
   }
   .has-checked\:border-accent-500:has(:checked) {
     border-color: var(--color-accent-500);
@@ -1766,6 +1783,9 @@
     }
     .dark\:hover\:text-white:where(.dark, .dark *):hover {
       color: var(--color-white);
+    }
+    .dark\:disabled\:hover\:bg-red-600:where(.dark, .dark *):disabled:hover {
+      background-color: var(--color-red-600);
     }
   }
   @media (forced-colors: active) {

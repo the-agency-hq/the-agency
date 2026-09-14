@@ -102,6 +102,26 @@ public class OrganizationService {
     return organization;
   }
 
+  /**
+   * Deletes an Organization on the operator's say-so. Its memberships, its source — credential included — and every
+   * version of its Brief go with it, by the schema's cascades, and every Handler polling it is served nothing for it
+   * from its next poll on.
+   *
+   * @param organization The Organization to delete.
+   * @param confirmation The Organization's name, as the operator typed it.
+   * @throws ValidationException if the confirmation is not the Organization's name.
+   */
+  public void delete(Organization organization, String confirmation) {
+    OrganizationValidator.validateDelete(organization, confirmation);
+    delete(organization.id());
+  }
+
+  /**
+   * Deletes an Organization outright, cascades and all, asking nothing. The admin UI goes through
+   * {@link #delete(Organization, String)}; this is for a caller that already holds the decision.
+   *
+   * @param organizationId The Organization.
+   */
   public void delete(UUID organizationId) {
     organizations.delete(organizationId);
   }

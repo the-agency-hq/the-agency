@@ -243,6 +243,9 @@ public class Main {
                    // Owner-only: the selection decides what every Handler in the Organization is served.
                    orgs.get("/{organizationId}/agents", web.inject(OrganizationController.class, OrganizationController::agentsForm), isOwner);
                    orgs.post("/{organizationId}/agents", web.inject(OrganizationController.class, OrganizationController::updateAgents), isOwner);
+                   // Owner-only: deleting takes the source, every version, and every membership with it.
+                   orgs.get("/{organizationId}/delete", web.inject(OrganizationController.class, OrganizationController::deleteForm), isOwner);
+                   orgs.post("/{organizationId}/delete", web.inject(OrganizationController.class, OrganizationController::delete), isOwner);
                    // Owner-only: the Sources page is where a source is connected, and the pickers under it swap
                    // the Organization's source repository.
                    orgs.get("/{organizationId}/sources", web.inject(OrganizationController.class, OrganizationController::sources), isOwner);

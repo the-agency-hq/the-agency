@@ -196,7 +196,7 @@ public class PollerServiceTest extends BaseTest {
   public void aSourceOfAnUnconfiguredKindIsReportedNotPolled() throws Exception {
     // A catalog built from an empty configuration: no kind is configured, though the fakes are still the clients.
     var unconfigured = new PollerService(briefs, sources, organizations,
-        new SourceCatalog(new Configuration(List.of()), github, gitlab), links, new BriefBuilder(), 3600);
+        new SourceCatalog(new Configuration(List.of()), github, gitlab, bitbucket), links, new BriefBuilder(), 3600);
     github.tokenLifetime(Duration.ofSeconds(-1));
     assertEquals(links.link(BriefSourceType.GITHUB, organization.id(), "code", "http://localhost/callback"),
         SourceLinkService.LinkResult.LINKED);

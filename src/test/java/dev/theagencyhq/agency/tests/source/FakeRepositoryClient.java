@@ -8,9 +8,10 @@ import module dev.theagencyhq.agency;
 import module java.base;
 
 /**
- * An in-memory repository host, standing in for a {@link RepositoryClient} throughout the suite. One class for both
- * hosts — it implements {@link GitHubClient} and {@link GitLabClient} alike — because the contract is the same and
- * the suite proves that the code above it cannot tell them apart; {@code BaseTest} holds one instance per host.
+ * An in-memory repository host, standing in for a {@link RepositoryClient} throughout the suite. One class for every
+ * host — it implements {@link GitHubClient}, {@link GitLabClient} and {@link BitbucketClient} alike — because the
+ * contract is the same and the suite proves that the code above it cannot tell them apart; {@code BaseTest} holds one
+ * instance per host.
  *
  * <p>The one thing worth explaining is the commit. A repository here has no history — it is a mutable map of paths
  * to bytes — and its head is the SHA-256 of that map's contents. That gives the poller exactly the property it
@@ -23,7 +24,7 @@ import module java.base;
  * {@link #failContents} for the host being unreachable, and simply not registering a repository for one that is not
  * visible.
  */
-public class FakeRepositoryClient implements GitHubClient, GitLabClient {
+public class FakeRepositoryClient implements BitbucketClient, GitHubClient, GitLabClient {
   private final String login;
   private final Map<String, Repository> repositories = new ConcurrentHashMap<>();
   private final Set<String> revoked = ConcurrentHashMap.newKeySet();
@@ -244,7 +245,7 @@ public class FakeRepositoryClient implements GitHubClient, GitLabClient {
       var digest = new StringBuilder();
       files.keySet().stream().sorted().forEach(path ->
           digest.append(path).append(' ')
-                .append(modes.getOrDefault(path, "100644")).append(' ')
+                .append(modes.getOrDefault(path, TreeEntry.MODE_REGULAR)).append(' ')
                 .append(Checksums.sha256Hex(files.get(path))).append('\n'));
       return Checksums.sha256Hex(digest.toString().getBytes(StandardCharsets.UTF_8));
     }
@@ -271,7 +272,7 @@ public class FakeRepositoryClient implements GitHubClient, GitLabClient {
 
     public Repository putBytes(String path, byte[] content) {
       files.put(path, content);
-      modes.putIfAbsent(path, "100644");
+      modes.putIfAbsent(path, TreeEntry.MODE_REGULAR);
       return this;
     }
 

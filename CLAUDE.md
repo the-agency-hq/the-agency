@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-The Agency web application: it authors, versions, and distributes Briefs (from GitHub or GitLab repositories) to Handlers.
+The Agency web application: it authors, versions, and distributes Briefs (from GitHub, GitLab, or Bitbucket
+repositories) to Handlers.
 Java 25 with JPMS modules, built with Latte (`project.latte`), running on the Latte Java stack
 (`org.lattejava:web`, `http`, `database`, `fusionauth`, `jwt`). PostgreSQL via jOOQ + HikariCP, JTE templates,
 Tailwind CSS, FusionAuth for all authentication.
@@ -33,7 +34,8 @@ Tailwind CSS, FusionAuth for all authentication.
   fetches the JWKS during construction).
 - Config overrides live in `~/.config/the-agency-hq/the-agency/config.properties`. Required keys are listed in
   `Main.REQUIRED_CONFIG`. Brief source credentials (`github.clientId`/`github.clientSecret`, `gitlab.clientId`/
-  `gitlab.clientSecret`) are optional: a kind of source is offered only when its credentials are configured
+  `gitlab.clientSecret`, `bitbucket.clientId`/`bitbucket.clientSecret`) are optional: a kind of source is offered only
+  when its credentials are configured
   (`SourceCatalog`), and with none configured the Sources page says so. Everything except connecting a source
   works without them.
 
@@ -43,9 +45,10 @@ Tailwind CSS, FusionAuth for all authentication.
 generated `AgencyModule` is registered in `module-info.java`). Every controller, service, repository, and
 `OrganizationSecurity` is a `@Singleton` wired by its constructor; the two `OIDC<User>` profiles are `@Named`
 `ssr` and `api` (`Wiring.SSR`, `Wiring.API`). `Wiring` is the one `@Factory`: it derives the OIDC profiles,
-`Cookies`, `Database`, `DSLContext`, the real `GitHubClient` and `GitLabClient`, and the JTE templates from the `Configuration`.
-`Main` builds the `Configuration` (which files it layers is its decision), supplies it to the `BeanScope` along
-with a test's fake host clients if there are any, registers the scope as Web's `Injector`
+`Cookies`, `Database`, `DSLContext`, the real `GitHubClient`, `GitLabClient` and `BitbucketClient`, and the JTE templates
+from the `Configuration`.
+`Main` builds the `Configuration` (which files it layers is its decision), supplies it to the `BeanScope` (under the `test`
+profile when built for tests), registers the scope as Web's `Injector`
 (`web.injector(injector::get)`), and builds the route table with `web.inject(Controller.class, Controller::method)`,
 which resolves the controller from the scope on every request. Building the scope is startup: migrations,
 FusionAuth discovery, the poller thread (`@PostConstruct`). Closing it is shutdown (`@PreDestroy` on the poller, the
@@ -74,9 +77,9 @@ http://localhost:1080) receives them locally.
 lists one card per kind the server is configured for (`SourceCatalog.available()`). `brief_sources` holds one row
 per Organization: a `type` (`BriefSourceType`, which also carries the kind's URL slug), the identity that type is
 unique by in `source` (the repository as its host names it — `owner/repository` on GitHub, `group/project` on
-GitLab — case-insensitive via the `(type, LOWER(source))` index), and the whole configuration — credential
-included — as one JSONB document in `source_config`, a `BriefSourceConfig` sealed hierarchy discriminated by `type`
-(`GitHubConfig`, `GitLabConfig`; the interface itself exposes `connection()`, `fullName()`, `branch()` and the
+GitLab, `workspace/repository` on Bitbucket — case-insensitive via the `(type, LOWER(source))` index), and the whole
+configuration — credential included — as one JSONB document in `source_config`, a `BriefSourceConfig` sealed hierarchy
+discriminated by `type` (`GitHubConfig`, `GitLabConfig`, `BitbucketConfig`; the interface itself exposes `connection()`, `fullName()`, `branch()` and the
 `with...` methods, so everything above the row is host-neutral). `RepositorySourceController` runs the OAuth
 handshake for every kind under `/app/oauth/{slug}/start|callback` (plus GitHub's install/setup pair); the callback
 creates the row connected and unregistered (`SourceLinkService.link`); the picker under `/sources/{slug}` registers
@@ -102,20 +105,29 @@ only on the way out of the Briefing API. Changing the selection (`OrganizationSe
 latest Brief as a new version in one transaction with the row update, so Handlers resync on their next poll.
 
 **Build gotcha.** `@JSON` is `SOURCE`-retained, and the compile is incremental: after editing a `@JSON` record that
-references another `@JSON` type, a stale `not @JSON-annotated` error means run `latte clean` first.
+references another `@JSON` type, a stale `not @JSON-annotated` error means run `latte clean` first. The same goes for
+Avaje: after adding or changing `@Bean`, `@Factory`, or `@Profile` annotations, a wall of `No dependency provided`
+errors means the generator saw only the recompiled files — run `latte clean` first.
 
 **Host seam.** `RepositoryClient` (package `source`) is the one contract for everything the app asks a repository
 host: the two OAuth grants, the account, the repository listing, a ref's head, one file, and the whole tree at a
-commit. `GitHubClient` and `GitLabClient` are marker sub-interfaces so the scope holds one bean per host;
-`GitHubHTTPClient` and `GitLabHTTPClient` are the real implementations, and `SourceCatalog` maps a
+commit. `GitHubClient`, `GitLabClient` and `BitbucketClient` are marker sub-interfaces so the scope holds one bean per
+host; `GitHubHTTPClient`, `GitLabHTTPClient` and `BitbucketHTTPClient` are the real implementations, all extending
+`HTTPRepositoryClient` (package `source`), which holds what they share — the HTTP client, the bearer request, the
+three-way status reading (`absent`/`require`/`unauthorized`), the OAuth `token` grant, and the archive `download` with
+its by-hand redirect — so a host's client writes only its URLs, wire shapes, paging, and where its file modes come
+from. `SourceCatalog` maps a
 `BriefSourceType` to its client, decides which kinds are configured, builds the authorize URL, and creates a
 fresh source of a kind from configuration (`unregistered`). A source describes itself for the admin UI
 (`BriefSourceConfig.details()`/`url()`); the Organization's page renders those rows and assumes nothing about
-what a source is. The hosts are the app's only outbound dependencies and the one thing tests
-fake — `FakeRepositoryClient` (one instance per host) is injected into `Main`'s constructor; the shared
-`RepositoryConnectionTestBase` runs the whole handshake suite once per kind. Adding a source type is a
+what a source is. The hosts are the app's only outbound dependencies and the one thing tests fake: `Wiring`'s real
+clients carry `@Profile(none = "test")`, the test module's `FakeHosts` factory registers one `FakeRepositoryClient`
+per host under `@Profile("test")`, and `Main` activates the profile (`Wiring.TEST_PROFILE`) when built for tests; the
+shared `RepositoryConnectionBaseTest` runs the whole handshake suite once per kind. Bitbucket has no tree endpoint, so
+`BitbucketHTTPClient` reads file modes off the recursive `src` listing's `attributes` and downloads the archive from
+the website rather than the API (`docs/design/2026-09-10-bitbucket-brief-source-design.md`). Adding a source type is a
 `BriefSourceType` constant, a `BriefSourceConfig` subtype plus its `unregistered` branch, a migration widening
-`brief_sources_ck_type`, a marker interface and HTTP client, a `Wiring` bean and `Main` constructor parameter, the
+`brief_sources_ck_type`, a marker interface and HTTP client, a `Wiring` bean and a `FakeHosts` bean, the
 catalog's entries (configured keys, authorize URL, `unregistered`), a card description and icon in
 `sources.jte`/`source-icon.jte`, and a subclass of the connection test base.
 

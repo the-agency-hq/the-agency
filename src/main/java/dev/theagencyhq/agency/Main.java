@@ -18,10 +18,10 @@ public class Main {
   public static final Path BASE_DIR = Path.of("web").toAbsolutePath();
   public static final int PORT = 8080;
   /**
-   * Everything the server cannot start without. The Brief source credentials ({@code github.*}, {@code gitlab.*})
-   * are deliberately not here: a kind of source is offered when its credentials are configured and hidden when
-   * they are not ({@code SourceCatalog}), so a server with none configured still starts and serves the Briefs it
-   * holds.
+   * Everything the server cannot start without. The Brief source credentials ({@code github.*}, {@code gitlab.*},
+   * {@code bitbucket.*}) are deliberately not here: a kind of source is offered when its credentials are configured
+   * and hidden when they are not ({@code SourceCatalog}), so a server with none configured still starts and serves
+   * the Briefs it holds.
    */
   public static final List<String> REQUIRED_CONFIG = List.of("db.password", "db.url", "db.username",
       "fusionauth.apiKey", "fusionauth.baseURL", "fusionauth.clientId", "fusionauth.clientSecret",
@@ -55,20 +55,20 @@ public class Main {
    * exist before the instance), falling back to {@link #PORT}.
    */
   public Main() {
-    this(new Configuration().getInteger("PORT", PORT), false, null, null);
+    this(new Configuration().getInteger("PORT", PORT), false);
   }
 
   /**
-   * @param port   The port to listen on. The tests pass their own so a suite run cannot collide with a development
-   *               server left listening on {@link #PORT} -- a collision that surfaces as every HTTP test class failing
-   *               in {@code @BeforeSuite}, which reads like a broken build rather than an occupied port.
-   * @param test   True to layer the test configuration over the defaults.
-   * @param github The GitHub client, or null for the real one. The repository hosts are the one seam the tests have
-   *               into the Agency's outbound dependencies: everything else a test drives is either in this process or
-   *               a local container it can provision, where GitHub and GitLab are neither.
-   * @param gitlab The GitLab client, or null for the real one.
+   * @param port The port to listen on. The tests pass their own so a suite run cannot collide with a development
+   *             server left listening on {@link #PORT} -- a collision that surfaces as every HTTP test class failing
+   *             in {@code @BeforeSuite}, which reads like a broken build rather than an occupied port.
+   * @param test True to layer the test configuration over the defaults and build the scope under the
+   *             {@link Wiring#TEST_PROFILE test profile}, which swaps the real repository host clients for the test
+   *             module's fakes. The hosts are the one seam the tests have into the Agency's outbound dependencies:
+   *             everything else a test drives is either in this process or a local container it can provision, where
+   *             the hosts are neither.
    */
-  public Main(int port, boolean test, GitHubClient github, GitLabClient gitlab) {
+  public Main(int port, boolean test) {
     this.config = new Configuration(
         REQUIRED_CONFIG,
         Path.of(System.getProperty("user.home"), ".config", "the-agency-hq", "the-agency", "config.properties"),
@@ -77,16 +77,14 @@ public class Main {
     );
 
     // The configuration is the one bean the scope cannot build for itself -- which files it is layered from is
-    // this constructor's decision -- so it is supplied, and everything else is derived from it (see Wiring). A
-    // supplied host client takes the place of the real one the same way. Building the scope is what constructs
-    // every singleton, in dependency order: the database and its migrations, the FusionAuth discovery behind the
-    // OIDC profiles, the poller thread.
+    // this constructor's decision -- so it is supplied, and everything else is derived from it (see Wiring). The
+    // test profile is the other thing only this constructor knows: under it the scope skips the real host clients
+    // and takes the test module's fakes, which Avaje finds by itself on the module path. Building the scope is
+    // what constructs every singleton, in dependency order: the database and its migrations, the FusionAuth
+    // discovery behind the OIDC profiles, the poller thread.
     var builder = BeanScope.builder().bean(Configuration.class, config);
-    if (github != null) {
-      builder.bean(GitHubClient.class, github);
-    }
-    if (gitlab != null) {
-      builder.bean(GitLabClient.class, gitlab);
+    if (test) {
+      builder.profiles(Wiring.TEST_PROFILE);
     }
     this.injector = builder.build();
 
@@ -220,7 +218,8 @@ public class Main {
              // connection or land a callback that stores one. Every kind is routed whether or not this server is
              // configured for it -- the controller answers 404 for one that is not -- so the route table is one
              // shape for every deployment. GitHub alone has the install pair: its return is a GitHub redirect that
-             // must find the picker to go back to, exactly as the callbacks find the Sources page.
+             // must find the picker to go back to, exactly as the callbacks find the Sources page. GitLab and
+             // Bitbucket read whatever the authorizing account can, so they have no such trip.
              for (var type : BriefSourceType.values()) {
                app.prefix("/oauth/" + type.slug(), oauth -> {
                      oauth.get("/start", web.inject(RepositorySourceController.class, (c, req, res) -> c.start(type, req, res)));

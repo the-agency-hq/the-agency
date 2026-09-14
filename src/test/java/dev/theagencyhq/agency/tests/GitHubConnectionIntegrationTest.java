@@ -11,11 +11,11 @@ import module org.testng;
 import static org.testng.Assert.*;
 
 /**
- * The GitHub handshake: every test in {@link RepositoryConnectionTestBase}, run against GitHub, plus the trip only
+ * The GitHub handshake: every test in {@link RepositoryConnectionBaseTest}, run against GitHub, plus the trip only
  * GitHub has — installing the App on an account and returning to the picker.
  */
 @Test(groups = "integration")
-public class GitHubConnectionIntegrationTest extends RepositoryConnectionTestBase {
+public class GitHubConnectionIntegrationTest extends RepositoryConnectionBaseTest {
   /**
    * An App configured to request user authorization during installation never uses its setup URL: GitHub runs the
    * OAuth flow after the install and returns to the callback with the code, {@code installation_id}, and

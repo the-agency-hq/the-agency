@@ -29,6 +29,7 @@ module dev.theagencyhq.agency {
   requires static org.lattejava.json;
 
   exports dev.theagencyhq.agency;
+  exports dev.theagencyhq.agency.bitbucket;
   exports dev.theagencyhq.agency.controller;
   exports dev.theagencyhq.agency.db;
   exports dev.theagencyhq.agency.db.jooq;
@@ -37,6 +38,7 @@ module dev.theagencyhq.agency {
   exports dev.theagencyhq.agency.gitlab;
   exports dev.theagencyhq.agency.model;
   exports dev.theagencyhq.agency.model.api;
+  exports dev.theagencyhq.agency.model.bitbucket;
   exports dev.theagencyhq.agency.model.github;
   exports dev.theagencyhq.agency.model.gitlab;
   exports dev.theagencyhq.agency.model.view;

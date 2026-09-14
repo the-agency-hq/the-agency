@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/build/generated/main" isTestSource="false" generated="true" />
       <sourceFolder url="file://$MODULE_DIR$/src/main/resources" type="java-resource" />
       <sourceFolder url="file://$MODULE_DIR$/src/test/resources" type="java-test-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/build/generated/test" isTestSource="true" generated="true" />
       <excludeFolder url="file://$MODULE_DIR$/.superpowers" />
       <excludeFolder url="file://$MODULE_DIR$/build" />
     </content>
@@ -16,99 +17,99 @@
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject-generator/12.6/avaje-inject-generator-12.6.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject-generator/12.6/avaje-inject-generator-12.6.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject-generator/12.6/avaje-inject-generator-12.6-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject-generator/12.6/avaje-inject-generator-12.6-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject/12.6/avaje-inject-12.6.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject/12.6/avaje-inject-12.6.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject/12.6/avaje-inject-12.6-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject/12.6/avaje-inject-12.6-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/jspecify/jspecify/1.0.0/jspecify-1.0.0.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/jspecify/jspecify/1.0.0/jspecify-1.0.0.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/jspecify/jspecify/1.0.0/jspecify-1.0.0-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/jspecify/jspecify/1.0.0/jspecify-1.0.0-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/jakarta/inject/jakarta.inject-api/2.0.1/jakarta.inject-api-2.0.1-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-applog/1.2/avaje-applog-1.2.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-applog/1.2/avaje-applog-1.2.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-applog/1.2/avaje-applog-1.2-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-applog/1.2/avaje-applog-1.2-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject-aop/12.6/avaje-inject-aop-12.6.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject-aop/12.6/avaje-inject-aop-12.6.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject-aop/12.6/avaje-inject-aop-12.6-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject-aop/12.6/avaje-inject-aop-12.6-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject-events/12.6/avaje-inject-events-12.6.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject-events/12.6/avaje-inject-events-12.6.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-inject-events/12.6/avaje-inject-events-12.6-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-inject-events/12.6/avaje-inject-events-12.6-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-spi-service/2.17/avaje-spi-service-2.17.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-spi-service/2.17/avaje-spi-service-2.17.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-spi-service/2.17/avaje-spi-service-2.17-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-spi-service/2.17/avaje-spi-service-2.17-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-spi-core/2.17/avaje-spi-core-2.17.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-spi-core/2.17/avaje-spi-core-2.17.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/avaje/avaje-spi-core/2.17/avaje-spi-core-2.17-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/avaje/avaje-spi-core/2.17/avaje-spi-core-2.17-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
@@ -126,44 +127,44 @@
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/gg/jte/jte/3.2.1/jte-3.2.1.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/gg/jte/jte/3.2.1/jte-3.2.1.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/gg/jte/jte/3.2.1/jte-3.2.1-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/gg/jte/jte/3.2.1/jte-3.2.1-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/gg/jte/jte-extension-api/3.2.1/jte-extension-api-3.2.1.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/gg/jte/jte-extension-api/3.2.1/jte-extension-api-3.2.1.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/gg/jte/jte-extension-api/3.2.1/jte-extension-api-3.2.1-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/gg/jte/jte-extension-api/3.2.1/jte-extension-api-3.2.1-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="PROVIDED">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/gg/jte/jte-runtime/3.2.1/jte-runtime-3.2.1.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/gg/jte/jte-runtime/3.2.1/jte-runtime-3.2.1.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/gg/jte/jte-runtime/3.2.1/jte-runtime-3.2.1-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/gg/jte/jte-runtime/3.2.1/jte-runtime-3.2.1-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/com/zaxxer/HikariCP/7.0.2/HikariCP-7.0.2.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/com/zaxxer/HikariCP/7.0.2/HikariCP-7.0.2.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/com/zaxxer/HikariCP/7.0.2/HikariCP-7.0.2-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/com/zaxxer/HikariCP/7.0.2/HikariCP-7.0.2-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
@@ -236,91 +237,90 @@
     <orderEntry type="module-library">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/postgresql/postgresql/42.7.11/postgresql-42.7.11.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/postgresql/postgresql/42.7.11/postgresql-42.7.11.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/postgresql/postgresql/42.7.11/postgresql-42.7.11-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/postgresql/postgresql/42.7.11/postgresql-42.7.11-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/jooq/jooq/3.21.4/jooq-3.21.4.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/jooq/jooq/3.21.4/jooq-3.21.4.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/jooq/jooq/3.21.4/jooq-3.21.4-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/jooq/jooq/3.21.4/jooq-3.21.4-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/r2dbc/r2dbc-spi/1.0.0.RELEASE/r2dbc-spi-1.0.0.RELEASE.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/r2dbc/r2dbc-spi/1.0.0.RELEASE/r2dbc-spi-1.0.0.RELEASE.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/io/r2dbc/r2dbc-spi/1.0.0.RELEASE/r2dbc-spi-1.0.0.RELEASE-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/io/r2dbc/r2dbc-spi/1.0.0.RELEASE/r2dbc-spi-1.0.0.RELEASE-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="TEST">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/testng/testng/7.12.0/testng-7.12.0.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/testng/testng/7.12.0/testng-7.12.0.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/testng/testng/7.12.0/testng-7.12.0-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/testng/testng/7.12.0/testng-7.12.0-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="TEST">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="TEST">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/jcommander/jcommander/1.83/jcommander-1.83.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/jcommander/jcommander/1.83/jcommander-1.83.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/jcommander/jcommander/1.83/jcommander-1.83-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/jcommander/jcommander/1.83/jcommander-1.83-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
     <orderEntry type="module-library" scope="TEST">
       <library>
         <CLASSES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/webjars/jquery/3.7.1/jquery-3.7.1.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/webjars/jquery/3.7.1/jquery-3.7.1.jar!/" />
         </CLASSES>
         <JAVADOC />
         <SOURCES>
-          <root url="jar://$USER_HOME$/.m2/repository/org/webjars/jquery/3.7.1/jquery-3.7.1-sources.jar!/" />
+          <root url="jar://$MAVEN_REPOSITORY$/org/webjars/jquery/3.7.1/jquery-3.7.1-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>
   </component>
 </module>
-

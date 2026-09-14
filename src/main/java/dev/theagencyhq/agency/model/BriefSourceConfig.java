@@ -17,9 +17,9 @@ import module org.lattejava.json;
  * separate questions: {@link #connected()} is whether the credential is there, {@link #registered()} whether the
  * thing to poll has been named. The poller has nothing to do with a source that is not both.
  *
- * <p>Every kind there is — GitHub, GitLab — is a git repository on a host the operator authorizes through OAuth,
- * so the contract is written for that shape: a {@link #connection()} the OAuth callback writes, and a repository
- * and {@link #branch()} the picker writes. Each writer replaces its own half and carries the other over
+ * <p>Every kind there is — GitHub, GitLab, Bitbucket — is a git repository on a host the operator authorizes through
+ * OAuth, so the contract is written for that shape: a {@link #connection()} the OAuth callback writes, and a
+ * repository and {@link #branch()} the picker writes. Each writer replaces its own half and carries the other over
  * ({@link #withConnection}, {@link #withRepository}), so re-picking a repository never costs a re-authorization and
  * a lapsed authorization never loses the repository. The subtypes are records because the JSON codec dispatches on
  * them, which is also why this interface is flat rather than layered: a kind that is not a repository would get
@@ -30,7 +30,7 @@ import module org.lattejava.json;
  */
 @JSON
 @JSONTypeInfo(property = "type")
-public sealed interface BriefSourceConfig permits GitHubConfig, GitLabConfig {
+public sealed interface BriefSourceConfig permits BitbucketConfig, GitHubConfig, GitLabConfig {
   /**
    * @return The branch to build from, or {@code null} until {@link #registered()}.
    */
@@ -57,7 +57,8 @@ public sealed interface BriefSourceConfig permits GitHubConfig, GitLabConfig {
 
   /**
    * @return The repository as its host names it everywhere the operator has seen it — {@code owner/repository} on
-   *     GitHub, the project's path with its namespace on GitLab — or {@code null} until {@link #registered()}. It
+   *     GitHub, the project's path with its namespace on GitLab, {@code workspace/repository} on Bitbucket — or
+   *     {@code null} until {@link #registered()}. It
    *     is what the admin UI shows, what the picker's form posts back, and what the host's API is asked about.
    */
   String fullName();

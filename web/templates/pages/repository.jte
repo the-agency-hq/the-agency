@@ -60,10 +60,15 @@
              class="mt-5 inline-flex items-center gap-2 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 px-4 py-2 text-sm font-semibold text-white dark:text-navy-950 transition-colors">
             Install the GitHub app
           </a>
-        @else
+        @elseif(model.type() == BriefSourceType.GITLAB)
           <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">
             This ${label} account is not a member of any project yet. Add it to the project that holds the Brief source
             on ${label}, then reload this page.
+          </p>
+        @else
+          <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">
+            This ${label} account cannot read any repository yet. Give it access to the repository that holds the Brief
+            source on ${label}, then reload this page.
           </p>
         @endif
       @else
@@ -101,9 +106,13 @@
           <p class="mt-6 border-t border-slate-200 dark:border-navy-800 pt-4 text-xs text-slate-500 dark:text-slate-400">
             Missing a repository? <a class="text-accent-700 dark:text-accent-400 hover:underline" href="/app/oauth/github/install?organizationId=${organizationId}">Install the app on another account, or adjust which repositories it can see</a>.
           </p>
-        @else
+        @elseif(model.type() == BriefSourceType.GITLAB)
           <p class="mt-6 border-t border-slate-200 dark:border-navy-800 pt-4 text-xs text-slate-500 dark:text-slate-400">
             Missing a project? The connected account has to be a member of it on ${label}. Reload this page once it is.
+          </p>
+        @else
+          <p class="mt-6 border-t border-slate-200 dark:border-navy-800 pt-4 text-xs text-slate-500 dark:text-slate-400">
+            Missing a repository? The connected account has to be able to read it on ${label}. Reload this page once it can.
           </p>
         @endif
       @endif

@@ -42,6 +42,11 @@ import org.lattejava.web.Configuration;
 public class Wiring {
   public static final String API = "api";
   public static final String SSR = "ssr";
+  /**
+   * The profile the tests build the scope under. The real host clients are skipped under it and the test module's
+   * factory supplies the fakes in their place.
+   */
+  public static final String TEST_PROFILE = "test";
 
   @Bean
   @Named(API)
@@ -58,6 +63,15 @@ public class Wiring {
   @Named(API)
   public OIDC<User> apiOIDC(@Named(API) OIDCConfig config) {
     return OIDC.api(config, UserService::toUser);
+  }
+
+  /**
+   * The real Bitbucket Cloud client. Faked in tests for the same reason as {@link #gitHubClient}.
+   */
+  @Bean
+  @Profile(none = TEST_PROFILE)
+  public BitbucketClient bitbucketClient(Configuration config) {
+    return new BitbucketHTTPClient(config.get("bitbucket.clientId", ""), config.get("bitbucket.clientSecret", ""));
   }
 
   @Bean
@@ -85,13 +99,15 @@ public class Wiring {
   }
 
   /**
-   * The real GitHub client. The tests supply a fake to the scope instead, which takes this bean's place: the repository
-   * hosts are the Agency's only outbound dependencies on services it does not own, and a suite that reached the real
-   * api.github.com would need a live GitHub App, a live installation, and a network — and would still be measuring
-   * GitHub rather than the Agency. Built whether or not GitHub is configured, from whatever credentials there are:
-   * {@code SourceCatalog} decides whether the kind is offered, and an unconfigured client is never asked anything.
+   * The real GitHub client. Skipped under the {@link #TEST_PROFILE test profile}, where the test module's factory
+   * supplies a fake in its place: the repository hosts are the Agency's only outbound dependencies on services it does
+   * not own, and a suite that reached the real api.github.com would need a live GitHub App, a live installation, and a
+   * network — and would still be measuring GitHub rather than the Agency. Built whether or not GitHub is configured,
+   * from whatever credentials there are: {@code SourceCatalog} decides whether the kind is offered, and an unconfigured
+   * client is never asked anything.
    */
   @Bean
+  @Profile(none = TEST_PROFILE)
   public GitHubClient gitHubClient(Configuration config) {
     return new GitHubHTTPClient(config.get("github.clientId", ""), config.get("github.clientSecret", ""));
   }
@@ -101,6 +117,7 @@ public class Wiring {
    * in tests for the same reason as {@link #gitHubClient}.
    */
   @Bean
+  @Profile(none = TEST_PROFILE)
   public GitLabClient gitLabClient(Configuration config) {
     return new GitLabHTTPClient(config.get("gitlab.baseURL", SourceCatalog.GITLAB_DEFAULT_BASE_URL),
         config.get("gitlab.clientId", ""), config.get("gitlab.clientSecret", ""));

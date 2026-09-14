@@ -14,7 +14,7 @@ import module java.base;
  * is empty), and the picker. What "nothing to offer" means and what fixes it is the one thing that differs by
  * kind: on GitHub the App is installed on no account the credential can see, and the page sends the operator to
  * install it through {@code RepositorySourceController.install}, which brings them back here; on GitLab the
- * account is a member of no project, and the fix happens on GitLab.
+ * account is a member of no project, on Bitbucket it can read no repository, and the fix happens on the host.
  *
  * @param type             The kind of source the picker is for.
  * @param organization     The Organization whose source is being pointed at a repository.

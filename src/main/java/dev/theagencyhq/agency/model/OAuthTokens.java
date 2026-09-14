@@ -24,7 +24,7 @@ import module org.lattejava.json;
  *                               what a GitHub App with expiring user tokens turned off issues.
  * @param refreshToken           The token that buys a new {@code accessToken}, or {@code null} if there is none.
  * @param refreshTokenExpiration When {@code refreshToken} stops working, or {@code null} if it never does — GitLab
- *                               issues refresh tokens without an expiry.
+ *                               and Bitbucket issue refresh tokens without an expiry.
  */
 @JSON
 public record OAuthTokens(String accessToken,

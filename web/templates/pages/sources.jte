@@ -21,7 +21,7 @@
         @template.components.admonition(
           type = "warning",
           title = @`No Brief sources are configured on this server.`,
-          content = @`Briefs are built from a source such as a GitHub repository, but this server has not been given the credentials for any. Whoever runs it needs to configure a source — for GitHub, <code class="font-mono">github.clientId</code> and <code class="font-mono">github.clientSecret</code>; for GitLab, <code class="font-mono">gitlab.clientId</code> and <code class="font-mono">gitlab.clientSecret</code> — and restart it. The README describes each.`)
+          content = @`Briefs are built from a source such as a GitHub repository, but this server has not been given the credentials for any. Whoever runs it needs to configure a source — for GitHub, <code class="font-mono">github.clientId</code> and <code class="font-mono">github.clientSecret</code>; for GitLab, <code class="font-mono">gitlab.clientId</code> and <code class="font-mono">gitlab.clientSecret</code>; for Bitbucket, <code class="font-mono">bitbucket.clientId</code> and <code class="font-mono">bitbucket.clientSecret</code> — and restart it. The README describes each.`)
       </div>
     @elseif(model.needsSource())
       <div class="mb-6">
@@ -67,6 +67,9 @@
                   @elseif(type == BriefSourceType.GITLAB)
                     Build Briefs from a project on GitLab. The Agency reads the projects the account you authorize is a
                     member of, and polls the one you choose for changes.
+                  @elseif(type == BriefSourceType.BITBUCKET)
+                    Build Briefs from a repository on Bitbucket Cloud. The Agency reads the repositories the account you
+                    authorize can read, and polls the one you choose for changes.
                   @endif
                 </p>
               </div>

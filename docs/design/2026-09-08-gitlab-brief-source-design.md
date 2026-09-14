@@ -71,7 +71,7 @@ controller answers 404 for a kind that is not configured.
 ## 7. Testing
 
 `FakeRepositoryClient` implements both marker interfaces; `BaseTest` holds one instance per host and hands both to
-`Main`. `RepositoryConnectionTestBase` runs the whole handshake, credential, picker and first-build suite once per
+`Main`. `RepositoryConnectionBaseTest` runs the whole handshake, credential, picker and first-build suite once per
 kind through `GitHubConnectionIntegrationTest` and `GitLabConnectionIntegrationTest`; the GitHub subclass adds the
 install trip, the GitLab subclass adds nested group paths, the `read_api` scope, and the absence of an install
 trip. `SourceCatalogTest` covers availability and URL building from configuration files; `PollerServiceTest`

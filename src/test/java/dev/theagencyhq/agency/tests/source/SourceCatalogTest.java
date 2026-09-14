@@ -22,13 +22,14 @@ import static org.testng.Assert.*;
  */
 @Test
 public class SourceCatalogTest {
+  private final FakeRepositoryClient bitbucket = new FakeRepositoryClient("bucket");
   private final FakeRepositoryClient github = new FakeRepositoryClient("octocat");
   private final FakeRepositoryClient gitlab = new FakeRepositoryClient("tanuki");
 
   @Test
   public void aBlankCredentialIsNotConfigured() throws IOException {
     var catalog = catalog("github.clientId=abc", "github.clientSecret=  ", "github.appName=the-agency",
-        "gitlab.clientId=", "gitlab.clientSecret=xyz");
+        "gitlab.clientId=", "gitlab.clientSecret=xyz", "bitbucket.clientId=bb", "bitbucket.clientSecret=");
 
     assertEquals(catalog.available(), List.of());
   }
@@ -43,7 +44,8 @@ public class SourceCatalogTest {
   @Test
   public void buildsTheHostURLs() throws IOException {
     var catalog = catalog("github.clientId=gh id", "github.clientSecret=s", "github.appName=the-agency",
-        "gitlab.clientId=gl-id", "gitlab.clientSecret=s", "gitlab.baseURL=https://git.example.com/");
+        "gitlab.clientId=gl-id", "gitlab.clientSecret=s", "gitlab.baseURL=https://git.example.com/",
+        "bitbucket.clientId=bb-key", "bitbucket.clientSecret=s");
 
     assertEquals(catalog.authorizeURL(BriefSourceType.GITHUB, "http://localhost:8080/app/oauth/github/callback", "n once"),
         "https://github.com/login/oauth/authorize?client_id=gh+id"
@@ -52,22 +54,36 @@ public class SourceCatalogTest {
         "https://git.example.com/oauth/authorize?client_id=gl-id"
             + "&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fapp%2Foauth%2Fgitlab%2Fcallback"
             + "&response_type=code&scope=read_api&state=nonce");
+    // No scope: Bitbucket's permissions are declared on the consumer and it takes none on the request.
+    assertEquals(catalog.authorizeURL(BriefSourceType.BITBUCKET, "http://localhost:8080/app/oauth/bitbucket/callback", "nonce"),
+        "https://bitbucket.org/site/oauth2/authorize?client_id=bb-key"
+            + "&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fapp%2Foauth%2Fbitbucket%2Fcallback"
+            + "&response_type=code&state=nonce");
   }
 
   /**
-   * A fresh source carries what its kind needs beyond the credential: nothing for GitHub, the instance's origin for
-   * GitLab -- with the trailing slash of the configured base URL dropped, so the URLs it later builds do not double
-   * it up.
+   * A fresh source carries what its kind needs beyond the credential: nothing for GitHub or Bitbucket, the
+   * instance's origin for GitLab -- with the trailing slash of the configured base URL dropped, so the URLs it later
+   * builds do not double it up.
    */
   @Test
   public void createsAFreshSourceForEachKind() throws IOException {
     var catalog = catalog("github.clientId=a", "github.clientSecret=b", "github.appName=c", "gitlab.clientId=a",
-        "gitlab.clientSecret=b", "gitlab.baseURL=https://git.example.com/");
+        "gitlab.clientSecret=b", "gitlab.baseURL=https://git.example.com/", "bitbucket.clientId=a",
+        "bitbucket.clientSecret=b");
     var connection = new OAuthConnection("octocat", new OAuthTokens("access", null, null, null));
 
     assertEquals(catalog.unregistered(BriefSourceType.GITHUB, connection), new GitHubConfig(connection, null, null, null));
     assertEquals(catalog.unregistered(BriefSourceType.GITLAB, connection),
         new GitLabConfig(connection, "https://git.example.com", null, null));
+    assertEquals(catalog.unregistered(BriefSourceType.BITBUCKET, connection), new BitbucketConfig(connection, null, null));
+
+    var bitbucket = catalog.unregistered(BriefSourceType.BITBUCKET, connection).withRepository("acme/briefs", "main");
+    assertEquals(bitbucket.url(), "https://bitbucket.org/acme/briefs");
+    assertEquals(bitbucket.details(), List.of(
+        new SourceDetail("Repository", "acme/briefs", "https://bitbucket.org/acme/briefs"),
+        new SourceDetail("Branch", "main", null)));
+    assertEquals(catalog.unregistered(BriefSourceType.BITBUCKET, connection).details(), List.of());
 
     var registered = catalog.unregistered(BriefSourceType.GITLAB, connection).withRepository("acme/platform/briefs", "main");
     assertEquals(registered.url(), "https://git.example.com/acme/platform/briefs");
@@ -94,13 +110,23 @@ public class SourceCatalogTest {
         List.of(BriefSourceType.GITHUB));
     assertEquals(catalog("gitlab.clientId=a", "gitlab.clientSecret=b").available(), List.of(BriefSourceType.GITLAB));
 
+    assertEquals(catalog("bitbucket.clientId=a", "bitbucket.clientSecret=b").available(),
+        List.of(BriefSourceType.BITBUCKET));
+
     var both = catalog("github.clientId=a", "github.clientSecret=b", "github.appName=c", "gitlab.clientId=a",
         "gitlab.clientSecret=b");
     assertEquals(both.available(), List.of(BriefSourceType.GITHUB, BriefSourceType.GITLAB));
     assertTrue(both.configured(BriefSourceType.GITHUB));
     assertTrue(both.configured(BriefSourceType.GITLAB));
+    assertFalse(both.configured(BriefSourceType.BITBUCKET));
     assertSame(both.client(BriefSourceType.GITHUB), github);
     assertSame(both.client(BriefSourceType.GITLAB), gitlab);
+
+    // Every kind, in the order the Sources page lists them.
+    var all = catalog("github.clientId=a", "github.clientSecret=b", "github.appName=c", "gitlab.clientId=a",
+        "gitlab.clientSecret=b", "bitbucket.clientId=a", "bitbucket.clientSecret=b");
+    assertEquals(all.available(), List.of(BriefSourceType.GITHUB, BriefSourceType.GITLAB, BriefSourceType.BITBUCKET));
+    assertSame(all.client(BriefSourceType.BITBUCKET), bitbucket);
   }
 
   /**
@@ -113,6 +139,8 @@ public class SourceCatalogTest {
 
     assertFalse(catalog.configured(BriefSourceType.GITHUB));
     assertSame(catalog.client(BriefSourceType.GITHUB), github);
+    assertFalse(catalog.configured(BriefSourceType.BITBUCKET));
+    assertSame(catalog.client(BriefSourceType.BITBUCKET), bitbucket);
   }
 
   /**
@@ -123,7 +151,7 @@ public class SourceCatalogTest {
     var file = Files.createTempFile("source-catalog-", ".properties");
     try {
       Files.writeString(file, String.join("\n", lines) + "\n");
-      return new SourceCatalog(new Configuration(List.of(), file), github, gitlab);
+      return new SourceCatalog(new Configuration(List.of(), file), github, gitlab, bitbucket);
     } finally {
       Files.deleteIfExists(file);
     }

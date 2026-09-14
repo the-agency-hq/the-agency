@@ -69,12 +69,14 @@ public class BriefSourceRepositoryTest extends BaseTest {
   /**
    * A GitLab source round-trips through the same column and the same codec under its own discriminator, and its
    * identity is unique per kind: the very same string registered as a GitHub repository by another Organization is
-   * a different source, because the index is over {@code (type, LOWER(source))} and not over the name alone.
+   * a different source, because the index is over {@code (type, LOWER(source))} and not over the name alone. And a
+   * Bitbucket source under the same name is a third.
    */
   @Test
   public void storesAGitLabSourceBesideAGitHubSourceOfTheSameName() {
     var first = insertOrganization();
     var second = insertOrganization();
+    var third = insertOrganization();
     var project = "acme/platform/briefs-" + UUID.randomUUID();
 
     var gitLab = new BriefSource(UUID.randomUUID(), first.id(),
@@ -107,6 +109,22 @@ public class BriefSourceRepositoryTest extends BaseTest {
     sources.create(gitHub);
     assertEquals(sources.findBySource(BriefSourceType.GITHUB, project).orElseThrow().id(), gitHub.id());
     assertEquals(sources.findAll().size(), 2);
+
+    var bitbucket = new BriefSource(UUID.randomUUID(), third.id(),
+        new BitbucketConfig(CONNECTION, null, null).withRepository(project, "main"), null, null, null, null,
+        TEST_INSTANT, TEST_INSTANT);
+    sources.create(bitbucket);
+    var storedBitbucket = sources.findByOrganizationId(third.id()).orElseThrow();
+    assertEquals(storedBitbucket, bitbucket);
+    assertEquals(storedBitbucket.type(), BriefSourceType.BITBUCKET);
+    assertEquals(storedBitbucket.source(), project);
+    assertEquals(sources.findBySource(BriefSourceType.BITBUCKET, project.toUpperCase(Locale.ROOT)).orElseThrow().id(),
+        bitbucket.id());
+    assertEquals(database.dsl()
+                         .resultQuery("SELECT source_config->>'repository' FROM brief_sources WHERE id = ?", bitbucket.id())
+                         .fetchOne()
+                         .get(0, String.class), project);
+    assertEquals(sources.findAll().size(), 3);
   }
 
   /**

@@ -7,9 +7,9 @@ package dev.theagencyhq.agency.source;
 import module java.base;
 
 /**
- * Unpacks the ZIP archive a repository host returns for one commit, in memory, into repository-relative paths. Both
- * hosts lay the archive out the same way — every entry under one root directory named for the repository and the
- * commit — so one reader serves both.
+ * Unpacks the ZIP archive a repository host returns for one commit, in memory, into repository-relative paths. Every
+ * host lays the archive out the same way — every entry under one root directory named for the repository and the
+ * commit — so one reader serves them all.
  */
 public final class Archives {
   /**

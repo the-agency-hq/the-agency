@@ -11,8 +11,10 @@ package dev.theagencyhq.agency.model;
  * a {@code RepositoryClient} for the host, and its entry in {@code SourceCatalog}.
  */
 public enum BriefSourceType {
+  // In the order the Sources page lists the kinds, which is why this one list is not alphabetical.
   GITHUB("GitHub", "github"),
-  GITLAB("GitLab", "gitlab");
+  GITLAB("GitLab", "gitlab"),
+  BITBUCKET("Bitbucket", "bitbucket");
 
   private final String label;
   private final String slug;

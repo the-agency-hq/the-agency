@@ -63,6 +63,14 @@ public class OrganizationController {
     return name.replace("\"", "").replace("\\", "");
   }
 
+  /**
+   * The Organization, cached on the request by {@code OrganizationSecurity}. Never {@code null}: every route that
+   * calls this has an {@code organizationId} in its path, and the middleware admits no such request without one.
+   */
+  private static Organization organization(HTTPRequest req) {
+    return (Organization) req.getAttribute(OrganizationSecurity.ORGANIZATION_ATTRIBUTE);
+  }
+
   private static Integer parseInt(String value) {
     try {
       return Integer.parseInt(value);
@@ -76,12 +84,7 @@ public class OrganizationController {
    * otherwise the Agents it picked.
    */
   public void agentsForm(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
+    var organization = organization(req);
     render("pages/agents.jte", req, res, new OrganizationAgentsView(organization, organization.agents() == null,
         organization.agents() == null ? List.of() : organization.agents().enabled(), List.of()));
   }
@@ -99,12 +102,7 @@ public class OrganizationController {
   }
 
   public void detail(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
+    var organization = organization(req);
     var source = sources.findByOrganizationId(organization.id()).orElse(null);
     var versions = briefs.findAllByOrganizationId(organization.id());
     // Cached by OrganizationSecurity, which admits no request without one, so this is a read rather than a query.
@@ -113,12 +111,7 @@ public class OrganizationController {
   }
 
   public void file(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
+    var organization = organization(req);
     var version = parseInt((String) req.getAttribute("version"));
     var index = parseInt((String) req.getAttribute("index"));
     if (version == null || index == null) {
@@ -204,12 +197,7 @@ public class OrganizationController {
   }
 
   public void rebuild(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
+    var organization = organization(req);
     // A nudge, not a build. Running the fetch and the build on the request thread would hold an HTTP worker for as
     // long as the slowest repository download takes, and it is the only thing that would ever build an Organization
     // off the poller thread -- which is what forced the per-Organization lock this class used to depend on. The
@@ -224,12 +212,7 @@ public class OrganizationController {
    * the OAuth callbacks land; the outcome they queued is the layout's to show.
    */
   public void sources(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
+    var organization = organization(req);
     var source = sources.findByOrganizationId(organization.id()).orElse(null);
     render("pages/sources.jte", req, res, new OrganizationSourcesView(organization, source, catalog.available()));
   }
@@ -240,12 +223,7 @@ public class OrganizationController {
    * rejected selection re-renders the form as submitted, so the reason shows next to what produced it.
    */
   public void updateAgents(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
+    var organization = organization(req);
     var all = req.getParameter("all") != null;
     var selected = new ArrayList<Agent>();
     var submitted = req.getParameters("agents");
@@ -268,12 +246,7 @@ public class OrganizationController {
   }
 
   public void version(HTTPRequest req, HTTPResponse res) throws IOException {
-    var organization = findOrganization(req);
-    if (organization == null) {
-      Main.missing(req, res);
-      return;
-    }
-
+    var organization = organization(req);
     var version = parseInt((String) req.getAttribute("version"));
     if (version == null) {
       Main.missing(req, res);
@@ -299,22 +272,6 @@ public class OrganizationController {
     var view = new BriefVersionView(organization, brief.version(), brief.checksum(), brief.sourceCommit(),
         brief.insertInstant(), brief.organization().agents(), entries);
     render("pages/version.jte", req, res, view);
-  }
-
-  private Organization findOrganization(HTTPRequest req) {
-    var raw = (String) req.getAttribute("organizationId");
-    if (raw == null) {
-      return null;
-    }
-
-    UUID id;
-    try {
-      id = UUID.fromString(raw);
-    } catch (IllegalArgumentException e) {
-      return null;
-    }
-
-    return organizations.findById(id).orElse(null);
   }
 
   /**

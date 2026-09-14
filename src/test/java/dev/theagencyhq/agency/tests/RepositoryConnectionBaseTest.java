@@ -25,7 +25,7 @@ import static org.testng.Assert.*;
  * {@code brief_sources.source_config} document and read back out of it — because that storage is the whole point
  * of the design and stubbing it would leave the part most worth proving untested. Only the host itself is faked.
  */
-public abstract class RepositoryConnectionTestBase extends BaseTest {
+public abstract class RepositoryConnectionBaseTest extends BaseTest {
   public StringBodyAsserter string = new StringBodyAsserter();
 
   /**

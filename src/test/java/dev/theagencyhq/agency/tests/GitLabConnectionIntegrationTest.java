@@ -12,11 +12,11 @@ import module org.testng;
 import static org.testng.Assert.*;
 
 /**
- * The GitLab handshake: every test in {@link RepositoryConnectionTestBase}, run against GitLab, plus what is
+ * The GitLab handshake: every test in {@link RepositoryConnectionBaseTest}, run against GitLab, plus what is
  * particular to GitLab — the authorization URL's scope, nested group paths, and a picker with no install trip.
  */
 @Test(groups = "integration")
-public class GitLabConnectionIntegrationTest extends RepositoryConnectionTestBase {
+public class GitLabConnectionIntegrationTest extends RepositoryConnectionBaseTest {
   /**
    * A GitLab project's path can carry a nested group. The whole path is the repository's name everywhere: what the
    * picker lists, what the form posts, what the row stores as its identity, and what the URL is built from.

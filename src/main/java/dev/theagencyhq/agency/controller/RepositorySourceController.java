@@ -15,8 +15,8 @@ import org.lattejava.web.Configuration;
 /**
  * Connecting a repository host as an Organization's Brief source: every {@code /oauth/{kind}} and
  * {@code /sources/{kind}} route, for every kind, from the OAuth handshake that creates the source to the picker that
- * points it at a repository. One controller for GitHub and GitLab alike, told which it is serving by the route table —
- * the handshake, the cookie, the ownership checks, and the picker are the same for both, and only the host behind
+ * points it at a repository. One controller for every host alike, told which it is serving by the route table — the
+ * handshake, the cookie, the ownership checks, and the picker are the same for all of them, and only the host behind
  * {@code SourceLinkService} differs.
  *
  * <p>Two round trips to the host and one page. The OAuth handshake ({@code /app/oauth/{kind}/start} and
@@ -30,7 +30,7 @@ import org.lattejava.web.Configuration;
  * GitHub App reads only the repositories it has been installed on, so the picker sends the operator to GitHub to
  * install it on an account (or widen what an installation covers) and takes them back to the picker when they return,
  * so the repositories they just granted are listed without them having to find their way back. A GitLab application
- * reads whatever the authorizing account can, so GitLab has no such step and no such routes.
+ * or a Bitbucket consumer reads whatever the authorizing account can, so neither has such a step or such routes.
  *
  * <p>Every route sits inside the gated {@code /app} prefix, so only a signed-in operator can start either trip, land
  * its return, or reach the picker. On top of that, all of them require the caller to be an ACTIVE OWNER of the
@@ -54,6 +54,7 @@ public class RepositorySourceController {
   public static final String COOKIE_PATH = "/app/oauth";
   public static final String SETUP_PATH = "/app/oauth/github/setup";
   public static final String STATE_COOKIE = "oauth_state";
+  private static final System.Logger logger = System.getLogger(RepositorySourceController.class.getName());
   private static final SecureRandom random = new SecureRandom();
   private final SourceCatalog catalog;
   private final Cookies cookies;
@@ -307,17 +308,15 @@ public class RepositorySourceController {
   }
 
   /**
-   * The Organization named by the {@code organizationId} path attribute of a picker route, or {@code null} if the
-   * attribute is missing, malformed, names no Organization — or the kind is not one this server offers.
+   * The Organization of a picker route, cached on the request by {@code OrganizationSecurity}, which admits no such
+   * request without one — or {@code null} if the kind is not one this server offers.
    */
   private Organization findOrganization(BriefSourceType type, HTTPRequest req) {
     if (!catalog.configured(type)) {
       return null;
     }
 
-    var raw = (String) req.getAttribute("organizationId");
-    var id = raw == null ? null : uuid(raw);
-    return id == null ? null : organizations.findById(id).orElse(null);
+    return (Organization) req.getAttribute(OrganizationSecurity.ORGANIZATION_ATTRIBUTE);
   }
 
   private void flashLinkResult(SourceLinkService.LinkResult result, BriefSourceType type) {
@@ -407,7 +406,8 @@ public class RepositorySourceController {
    *
    * <p>A failure while listing degrades to the Sources page rather than to an error page: a picker with no list is
    * a dead end, an outage on the host's side is not a reason to make the Organization unreachable, and if the failure
-   * was the credential dying, that page is where the (re)connect warning lives.
+   * was the credential dying, that page is where the (re)connect warning lives. Any other failure is logged, since
+   * the redirect itself says nothing about what the host answered.
    */
   private void renderPicker(BriefSourceType type, HTTPRequest req, HTTPResponse res, Organization organization,
                             BriefSourceConfig config, String accessToken, List<String> errors, String selected,
@@ -426,6 +426,8 @@ public class RepositorySourceController {
       res.sendRedirect(sourcesPath(organization.id()), 303);
       return;
     } catch (RepositoryException e) {
+      logger.log(System.Logger.Level.WARNING, "Unable to list the " + type.label() + " repositories for Organization ["
+          + organization.id() + "]", e);
       res.sendRedirect(sourcesPath(organization.id()), 303);
       return;
     }

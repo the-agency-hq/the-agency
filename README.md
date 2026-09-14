@@ -39,14 +39,14 @@ This project uses the Latte Web framework and HTTP server. You can learn more ab
 ## Concepts
 
 * Brief - the collection of rules, commands, skills, and other files used by Agents (LLMs)
-* Organization - has a single Brief source, a connected GitHub repository or GitLab project, that its Brief is built from
+* Organization - has a single Brief source, a connected GitHub, GitLab, or Bitbucket repository, that its Brief is built from
 * Member - a user that is part of an Organization
 
 ## Brief sources
 
-Users connect a repository on a host — GitHub or GitLab — to an Organization. This app polls the host for changes to the repository. Any changes that occur are downloaded and translated into a Brief. This is stored in the database and versioned.
+Users connect a repository on a host — GitHub, GitLab, or Bitbucket Cloud — to an Organization. This app polls the host for changes to the repository. Any changes that occur are downloaded and translated into a Brief. This is stored in the database and versioned.
 
-A kind of source is offered on an Organization's **Sources** page only when the server holds its OAuth credentials (`github.clientId`/`github.clientSecret` for GitHub, `gitlab.clientId`/`gitlab.clientSecret` for GitLab). None of them is required configuration: with neither configured, the server starts and the Sources page says that no source is configured yet. An Organization holds one source, so connecting one kind replaces a source of the other.
+A kind of source is offered on an Organization's **Sources** page only when the server holds its OAuth credentials (`github.clientId`/`github.clientSecret` for GitHub, `gitlab.clientId`/`gitlab.clientSecret` for GitLab, `bitbucket.clientId`/`bitbucket.clientSecret` for Bitbucket). None of them is required configuration: with none configured, the server starts and the Sources page says that no source is configured yet. An Organization holds one source, so connecting one kind replaces a source of the other.
 
 ### GitHub App
 
@@ -92,6 +92,25 @@ gitlab.baseURL=https://gitlab.example.com
 ```
 
 Connecting a project is the same workflow: open the Organization's **Sources** page, connect GitLab, and pick a project. The picker lists every project the authorizing account is a member of, directly or through a group, by its full path (`group/subgroup/project`); there is no install step, so an account that is a member of no project is told to fix that on GitLab. GitLab access tokens expire after two hours and are refreshed in place by the poller with the refresh token GitLab issues alongside them.
+
+### Bitbucket OAuth consumer
+
+Connecting a Bitbucket Cloud repository goes through an OAuth consumer on a Bitbucket workspace (**Workspace settings → OAuth consumers**). Register one per environment and configure it as follows:
+
+| Setting                    | Value                                     |
+|----------------------------|-------------------------------------------|
+| Callback URL               | `<base URL>/app/oauth/bitbucket/callback` |
+| This is a private consumer | On                                        |
+| Permissions                | Account: Read, Repositories: Read         |
+
+Then put its key and secret in `~/.config/the-agency-hq/the-agency/config.properties`:
+
+```properties
+bitbucket.clientId=<the consumer's key>
+bitbucket.clientSecret=<the consumer's secret>
+```
+
+Connecting a repository is the same workflow: open the Organization's **Sources** page, connect Bitbucket, and pick a repository. The picker lists every repository the authorizing account can read, across every workspace it belongs to, by its full name (`workspace/repository`); there is no install step, so an account that can read no repository is told to fix that on Bitbucket. Bitbucket access tokens expire after two hours and are refreshed in place by the poller with the refresh token Bitbucket issues alongside them. Bitbucket Data Center is not supported.
 
 ### Agent selection
 

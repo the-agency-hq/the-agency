@@ -9,13 +9,14 @@ import module java.base;
 
 /**
  * Everything the Agency asks a repository host for, as one interface per host so the whole of it can be replaced in
- * tests without a network: the two OAuth grants, and the reads made with the token they produce. GitHub and GitLab
- * each implement it once; everything above — the OAuth handshake, the picker, the validator, the poller — is written
- * against this and told apart nothing but which host it is talking to.
+ * tests without a network: the two OAuth grants, and the reads made with the token they produce. GitHub, GitLab and
+ * Bitbucket each implement it once; everything above — the OAuth handshake, the picker, the validator, the poller —
+ * is written against this and told apart nothing but which host it is talking to.
  *
  * <p>A repository is named by its {@code fullName} throughout: {@code owner/repository} on GitHub, the project's
- * path with its namespace on GitLab. It is the same string the host shows the operator, the one the picker's form
- * posts back, and the one {@code BriefSourceConfig#fullName()} stores, so nothing translates it on the way through.
+ * path with its namespace on GitLab, {@code workspace/repository} on Bitbucket. It is the same string the host shows
+ * the operator, the one the picker's form posts back, and the one {@code BriefSourceConfig#fullName()} stores, so
+ * nothing translates it on the way through.
  *
  * <p>Implementations never throw a checked exception, and report three different kinds of outcome three different
  * ways. A call that could not be completed at all raises {@link RepositoryException}, which is transient and clears
@@ -93,7 +94,7 @@ public interface RepositoryClient {
    * @param accessToken The token.
    * @return Every repository the token can offer as a Brief source, in no particular order. Empty is an ordinary
    *     state — on GitHub, an operator who has authorized the App but installed it nowhere; on GitLab, an account
-   *     that is a member of no project.
+   *     that is a member of no project; on Bitbucket, an account that can read no repository.
    * @throws RepositoryUnauthorizedException If the host rejected the token.
    */
   List<RepositorySummary> repositories(String accessToken);

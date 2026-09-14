@@ -15,7 +15,7 @@ import org.lattejava.web.Configuration;
  * configuration keys, so the Sources page, the routes, and the poller all agree on what "configured" means.
  *
  * <p>A kind is configured when its OAuth application's client id and secret are both set. Nothing here is required
- * configuration: a server with neither GitHub nor GitLab configured starts, serves the Briefs it already holds, and
+ * configuration: a server with no kind configured starts, serves the Briefs it already holds, and
  * tells an Owner on the Sources page that there is nothing to connect to yet. That is deliberate — the credentials
  * are the one thing a deployment cannot have by default, since a checked-in GitHub App would let anyone who cloned
  * the repository act as it, and hiding the unconfigured kind is more honest than offering a button that fails.
@@ -31,15 +31,18 @@ import org.lattejava.web.Configuration;
 public class SourceCatalog {
   public static final String GITLAB_DEFAULT_BASE_URL = "https://gitlab.com";
   private final List<BriefSourceType> available;
+  private final String bitbucketClientId;
   private final Map<BriefSourceType, RepositoryClient> clients = new EnumMap<>(BriefSourceType.class);
   private final String gitHubClientId;
   private final String gitLabBaseURL;
   private final String gitLabClientId;
 
-  public SourceCatalog(Configuration config, GitHubClient github, GitLabClient gitlab) {
+  public SourceCatalog(Configuration config, GitHubClient github, GitLabClient gitlab, BitbucketClient bitbucket) {
+    this.clients.put(BriefSourceType.BITBUCKET, bitbucket);
     this.clients.put(BriefSourceType.GITHUB, github);
     this.clients.put(BriefSourceType.GITLAB, gitlab);
     this.available = Arrays.stream(BriefSourceType.values()).filter(type -> configured(config, type)).toList();
+    this.bitbucketClientId = config.get("bitbucket.clientId", "");
     this.gitHubClientId = config.get("github.clientId", "");
     this.gitLabBaseURL = baseURL(config.get("gitlab.baseURL", GITLAB_DEFAULT_BASE_URL));
     this.gitLabClientId = config.get("gitlab.clientId", "");
@@ -60,6 +63,7 @@ public class SourceCatalog {
    */
   public static boolean configured(Configuration config, BriefSourceType type) {
     return switch (type) {
+      case BITBUCKET -> !blank(config.get("bitbucket.clientId")) && !blank(config.get("bitbucket.clientSecret"));
       case GITHUB -> !blank(config.get("github.clientId")) && !blank(config.get("github.clientSecret"));
       case GITLAB -> !blank(config.get("gitlab.clientId")) && !blank(config.get("gitlab.clientSecret"));
     };
@@ -83,6 +87,7 @@ public class SourceCatalog {
    */
   public String authorizeURL(BriefSourceType type, String redirectURI, String state) {
     return switch (type) {
+      case BITBUCKET -> BitbucketHTTPClient.authorizeURL(bitbucketClientId, redirectURI, state);
       case GITHUB -> GitHubHTTPClient.authorizeURL(gitHubClientId, redirectURI, state);
       case GITLAB -> GitLabHTTPClient.authorizeURL(gitLabBaseURL, gitLabClientId, redirectURI, state);
     };
@@ -116,6 +121,7 @@ public class SourceCatalog {
    */
   public BriefSourceConfig unregistered(BriefSourceType type, OAuthConnection connection) {
     return switch (type) {
+      case BITBUCKET -> new BitbucketConfig(connection, null, null);
       case GITHUB -> new GitHubConfig(connection, null, null, null);
       case GITLAB -> new GitLabConfig(connection, gitLabBaseURL, null, null);
     };

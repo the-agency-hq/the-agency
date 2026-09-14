@@ -29,8 +29,9 @@ import static org.testng.Assert.*;
  * make every HTTP test class fail in configuration with "one of the listeners threw an exception", which reads like a
  * broken build rather than an occupied port.
  *
- * <p>The repository hosts are the one dependency the suite fakes. {@link #github} and {@link #gitlab} are in-memory
- * hosts, handed to {@code Main} so every service is built on them; everything else — FusionAuth, Postgres — is the
+ * <p>The repository hosts are the one dependency the suite fakes. {@link #github}, {@link #gitlab} and
+ * {@link #bitbucket} are the in-memory hosts {@link FakeHosts} registers under the test profile, taken back out of
+ * the scope so a test can seed them; every service is built on them. Everything else — FusionAuth, Postgres — is the
  * real thing running locally, and the credentials these tests store are genuinely written to and read back from
  * the {@code brief_sources} table.
  *
@@ -74,6 +75,7 @@ public abstract class BaseTest {
    * whole point of keeping the Applications separate.
    */
   public static OIDCTestFixture apiOIDC;
+  public static FakeRepositoryClient bitbucket;
   public static BriefingService briefingService;
   public static BriefRepository briefs;
   public static SourceCatalog catalog;
@@ -84,8 +86,8 @@ public abstract class BaseTest {
    * creates. Everything else authenticates through the OIDC fixtures rather than this.
    */
   public static FusionAuthClient fusionAuth;
-  public static FakeRepositoryClient github = new FakeRepositoryClient("agency-test");
-  public static FakeRepositoryClient gitlab = new FakeRepositoryClient("agency-test-gitlab");
+  public static FakeRepositoryClient github;
+  public static FakeRepositoryClient gitlab;
   public static SourceLinkService links;
   public static Main main;
   public static MemberRepository members;
@@ -118,8 +120,12 @@ public abstract class BaseTest {
 
   @BeforeSuite
   public static void beforeSuite() throws Exception {
-    main = new Main(TEST_PORT, true, github, gitlab);
+    main = new Main(TEST_PORT, true);
     main.main();
+    // The scope's host clients are the fakes FakeHosts registered under the test profile.
+    bitbucket = (FakeRepositoryClient) main.inject(BitbucketClient.class);
+    github = (FakeRepositoryClient) main.inject(GitHubClient.class);
+    gitlab = (FakeRepositoryClient) main.inject(GitLabClient.class);
     briefingService = main.inject(BriefingService.class);
     briefs = main.inject(BriefRepository.class);
     catalog = main.inject(SourceCatalog.class);
@@ -273,6 +279,7 @@ public abstract class BaseTest {
     resetDatabase();
     github.reset();
     gitlab.reset();
+    bitbucket.reset();
 
     // The tester is shared by the whole suite and accumulates headers, form fields, and a body until something
     // clears them. Clearing here means a method starts from nothing, exactly as it starts with an empty database,
@@ -336,7 +343,11 @@ public abstract class BaseTest {
    * @return The fake standing in for that kind's host.
    */
   protected static FakeRepositoryClient fake(BriefSourceType type) {
-    return type == BriefSourceType.GITHUB ? github : gitlab;
+    return switch (type) {
+      case BITBUCKET -> bitbucket;
+      case GITHUB -> github;
+      case GITLAB -> gitlab;
+    };
   }
 
   /**

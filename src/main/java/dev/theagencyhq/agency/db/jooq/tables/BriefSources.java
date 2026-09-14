@@ -218,7 +218,7 @@ public class BriefSources extends TableImpl<BriefSourcesRecord> {
     public List<Check<BriefSourcesRecord>> getChecks() {
         return Arrays.asList(
             Internal.createCheck(this, DSL.name("brief_sources_ck_source_config_type"), "(((source_config ->> 'type'::text) = type))", true),
-            Internal.createCheck(this, DSL.name("brief_sources_ck_type"), "((type = ANY (ARRAY['GITHUB'::text, 'GITLAB'::text])))", true),
+            Internal.createCheck(this, DSL.name("brief_sources_ck_type"), "((type = ANY (ARRAY['BITBUCKET'::text, 'GITHUB'::text, 'GITLAB'::text])))", true),
             Internal.createCheck(this, DSL.name("brief_sources_last_status_check"), "((last_status = ANY (ARRAY['BUILD_FAILED'::text, 'FETCH_FAILED'::text, 'NOT_CONNECTED'::text, 'OK'::text, 'UNCHANGED'::text])))", true)
         );
     }

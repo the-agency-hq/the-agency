@@ -197,7 +197,7 @@ public class AdminUIIntegrationTest extends BaseTest {
 
   /**
    * The Sources page offers one card per kind this server is configured for -- the test configuration carries
-   * credentials for both -- each with its own connect link, and nothing else says there is nothing to connect to.
+   * credentials for all three -- each with its own connect link, and nothing else says there is nothing to connect to.
    */
   @Test
   public void sourcesOffersEveryConfiguredKind() {
@@ -209,6 +209,8 @@ public class AdminUIIntegrationTest extends BaseTest {
                                     .contains("/app/oauth/github/start?organizationId=" + organizationId)
                                     .contains("Connect to GitLab")
                                     .contains("/app/oauth/gitlab/start?organizationId=" + organizationId)
+                                    .contains("Connect to Bitbucket")
+                                    .contains("/app/oauth/bitbucket/start?organizationId=" + organizationId)
                                     .doesNotContain("No Brief sources are configured"));
   }
 
